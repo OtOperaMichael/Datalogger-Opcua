@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {useSelectedServerStore} from "@/stores/useSelectedServerStore.ts";
 import {useTemplateListStore} from "@/stores/useTemplateListStore.ts";
-import type {TemplateInterface, TableInterface} from "@/types/template.ts";
+import type {TemplateInterface, CustomTableInterface} from "@/types/template.ts";
 import {ref, computed, watch} from 'vue';
 import {message} from 'ant-design-vue';
 import request from "@/utils/request.ts";
@@ -33,7 +33,7 @@ const exporting = ref(false);
 // Computed property for available tables
 const availableTables = computed(() => {
   if (!template.value?.tableList) return [];
-  return template.value.tableList.filter((table: TableInterface) => table.name && table.name.trim() !== '');
+  return template.value.tableList.filter((table: CustomTableInterface) => table.name && table.name.trim() !== '');
 });
 
 // Reset form when server changes
@@ -86,7 +86,7 @@ async function executeQuery() {
   loading.value = true;
   try {
     // Find the selected table to determine database type
-    const selectedTable = availableTables.value.find((t: TableInterface) => t.name === queryForm.value.selectedTable);
+    const selectedTable = availableTables.value.find((t: CustomTableInterface) => t.name === queryForm.value.selectedTable);
     if (!selectedTable) {
       throw new Error('Selected table not found');
     }
@@ -215,7 +215,7 @@ function isDateKey(key: string | number): boolean {
           <a-select
             v-model:value="queryForm.selectedTable"
             placeholder="Choose a table"
-            :options="availableTables.map((table: TableInterface) => ({ value: table.name, label: table.name }))"
+            :options="availableTables.map((table: CustomTableInterface) => ({ value: table.name, label: table.name }))"
             allow-clear
             style="min-width: 180px; width: 200px;"
           />

@@ -1,44 +1,66 @@
-//定义template 中每个table 的类型
+/**
+ * template contains multiple different modules
+ * 1. custom module
+ * 2. alarm module
+ * 3. comm module
+ * 4. xxx module
+ */
 
-enum TagType {
+//1. custom module
+
+enum NodeType {
+  SCALAR, //int, double, string, bool....
+  ARRAY
+}
+
+enum DataType {
   BOOL,
-  Int,
-  Dint,
-  Real
+  INT,
+  DOUBLE,
+  STRING,
 }
 
-interface TableInterface {
+interface CustomTagInterface {
   name: string;
-  tagAddr: string;
-  tagType: TagType;
-  tagList: TagInterface[];
+  nodeId: string;
+  dataType: DataType;
 }
 
-interface ModuleInterface {
+interface CustomTableInterface {
+  name: string;
+  nodeType: NodeType;
+  nodeList: CustomTagInterface[];
+}
+
+interface CustomModuleInterface {
   enable: boolean;
-  tableList: TableInterface[];
+  tableList: CustomTableInterface[];
 }
 
-interface TagInterface {
-  name: string;
-  tagAddr: string;
-  placeHolder1: string;
-  placeHolder2: string;
-  placeHolder3: string;
-}
+//alarm module
+
+
+//comm module
 
 interface TemplateInterface {
   id: string;
   name: string;
   sampleInterval: number;
-  placeHolder: string;
-  hostCpuSlot: string;
-  custom: ModuleInterface;
-  alarm: ModuleInterface;
-  communication: ModuleInterface;
+  port: string;
+  postfix: string; //optional
+  custom: CustomModuleInterface;
+  alarm: CustomModuleInterface;
+  communication: CustomModuleInterface;
 }
 
-export {TagType, type TableInterface, type ModuleInterface,  type TemplateInterface};
+export {
+  NodeType,
+  DataType,
+  type CustomTagInterface,
+  type CustomTableInterface,
+  type CustomModuleInterface,
+  type TemplateInterface
+};
 
 
 

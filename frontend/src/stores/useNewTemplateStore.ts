@@ -1,45 +1,44 @@
 import {defineStore} from 'pinia'
-import {type TableInterface, TagType, type TemplateInterface} from "@/types/template.ts";
+import {
+  NodeType, DataType,
+  type CustomTagInterface,
+  type CustomTableInterface,
+  type CustomModuleInterface,
+  type TemplateInterface,
+} from "@/types/template.ts";
 
-
-
-// //  提取“非 templateList”的初始状态（作为常量）
-// const getDefaultTemplate = () => ({
-//   templateName: "",
-//   sampleInterval: 500,
-//   hostCpuSlot: "1,0",
-//   tableList: Array.from({length: 10}, () => ({
-//     tableName: "",
-//     DBType: DBType.Mysql,
-//     tagAddr: "",
-//     tagType: TagType.BOOL,
-//     nameList: Array(16).fill("")
-//   }))
-// });
 
 export const useNewTemplateStore = defineStore("newTemplateStore", {
   state: () => ({
     id: "",
     name: "",
-    sampleInterval: 500,
-    hostCpuSlot: "1,0",
-    tableList: Array.from({length: 1}, () => ({
-      name: "",
-      tagAddr: "",
-      tagType: TagType.Int,
-      tagNameList: Array(10).fill("")
-    })),
+    sampleInterval: 1000,
+    port: "4840",
+    postfix: "",
+    custom: {
+      enable: true,
+      tableList: Array.from({length: 1}, () => ({
+        name: "",
+        nodeType: NodeType.SCALAR,
+        nodeList: Array.from({length: 10}, () => ({
+          name: "",
+          nodeId: "",
+          dataType: DataType.INT
+        }))
+      })) as CustomTableInterface[]
+    } as CustomModuleInterface,
+    alarm: {
+      enable: false,
+      tableList: [] as CustomTableInterface[]
+    } as CustomModuleInterface,
+    communication: {
+      enable: false,
+      tableList: [] as CustomTableInterface[]
+    } as CustomModuleInterface,
     createNew: false
   }),
 
   actions: {
-    // reset() {
-    //   // 新增：仅重置除 templateList 外的字段
-    //   const defalutData = getDefaultTemplate();
-    //   Object.assign(this, defalutData);
-    //   // 注意：Object.assign 不会影响 templateList，因为它不在 resetData 中
-    // },
-
     /**
      * 发送给后端转换用
      */
@@ -48,8 +47,11 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         id: this.id,
         name: this.name,
         sampleInterval: this.sampleInterval,
-        hostCpuSlot: this.hostCpuSlot,
-        tableList: this.tableList
+        port: this.port,
+        postfix: this.postfix,
+        custom: JSON.parse(JSON.stringify(this.custom)),
+        alarm: JSON.parse(JSON.stringify(this.alarm)),
+        communication: JSON.parse(JSON.stringify(this.communication))
       };
     },
 
@@ -58,12 +60,14 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
      * @param data
      */
     loadTemplate(data: TemplateInterface) {
-      // Object.assign(this, data);
       this.id = data.id;
       this.name = data.name;
       this.sampleInterval = data.sampleInterval;
-      this.hostCpuSlot = data.hostCpuSlot;
-      this.tableList = [...data.tableList]; // 浅拷贝避免引用共享
+      this.port = data.port;
+      this.postfix = data.postfix || "";
+      this.custom = data.custom ? JSON.parse(JSON.stringify(data.custom)) : this.custom;
+      this.alarm = data.alarm ? JSON.parse(JSON.stringify(data.alarm)) : this.alarm;
+      this.communication = data.communication ? JSON.parse(JSON.stringify(data.communication)) : this.communication;
     },
 
     // 校验 templateName
@@ -106,33 +110,63 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return {valid: true}
     },
 
-    // 校验 hostCpuSlot 格式必须为 "数字,数字"
-    validateHostCpuSlot() {
-      const value = this.hostCpuSlot
+    // 校验 port 格式必须为纯数字，不能以 0 开头
+    validatePort() {
+      const value = this.port
 
-      // 1. 必须是字符串
-      if (typeof value !== 'string') {
-        return {valid: false, message: 'Host CPU slot must be a string in format "x,x"'}
+      // 1. 必须是字符串且不能为空
+      if (typeof value !== 'string' || !value) {
+        return {valid: false, message: 'Port is required'}
       }
 
-      // 2. 使用正则匹配：严格两个非负整数，中间一个逗号，无空格
-      const match = value.match(/^(\d+),(\d+)$/)
+      // 2. 必须是纯数字，不能以 0 开头（除非就是 "0"）
+      // 正则解释：^[1-9]\d*$ 表示以 1-9 开头，后面跟任意数字；^0$ 表示单独的 0
+      const match = value.match(/^[1-9]\d*$/)
       if (!match) {
         return {
           valid: false,
-          message: 'Host CPU slot must be in format "x,x" where x is a non-negative integer (e.g., "1,0")'
+          message: 'Port must be a number without leading zeros (e.g., "44818", not "044818")'
+        }
+      }
+
+      // 3. 检查端口范围 1-65535
+      const portNum = parseInt(value, 10)
+      if (portNum < 1 || portNum > 65535) {
+        return {
+          valid: false,
+          message: 'Port must be between 1 and 65535'
         }
       }
 
       return {valid: true}
     },
 
-    // 校验单个 table
-    validateSingleTable(table: TableInterface, index: number) {
+    // 校验 postfix：可以为空，如果不为空则中间不能有空格
+    validatePostfix() {
+      const value = this.postfix
+
+      // 如果为空，直接返回有效
+      if (!value || value === '') {
+        return {valid: true}
+      }
+
+      // 如果不为空，检查不能包含空格
+      if (/\s/.test(value)) {
+        return {
+          valid: false,
+          message: 'Postfix cannot contain spaces or whitespace'
+        }
+      }
+
+      return {valid: true}
+    },
+
+    // 校验单个 table, custom module
+    validateSingleCustomTable(table: CustomTableInterface, index: number) {
       const errors = []
       const tn = table.name
-      const ta = table.tagAddr
-      const nl = table.tagNameList
+      const nt = table.nodeType
+      const nl = table.nodeList
 
       // 1. tableName 不能为空
       if (tn === '') {
@@ -147,37 +181,69 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         }
       }
 
-      // 2. tagAddr 不能为空
-      if (ta === '') {
-        errors.push(`Table ${index + 1}: Tag address is required`)
+      // 2. nodeType 必须是 SCALAR 或 ARRAY
+      if (nt !== NodeType.SCALAR && nt !== NodeType.ARRAY) {
+        errors.push(`Table ${index + 1}: Node type must be SCALAR or ARRAY`)
       }
 
-      // 3. nameList 所有元素都不能为空
-      for (let i = 0; i < nl.length; i++) {
-        const tag = nl[i] as string
+      // 3. nodeList 不能为空
+      if (!nl || nl.length === 0) {
+        errors.push(`Table ${index + 1}: Node list is required and cannot be empty`)
+      } else {
+        // 校验每个 node
+        for (let i = 0; i < nl.length; i++) {
+          const node = nl[i]
 
-        if (tag === '') {
-          errors.push(`Table ${index + 1}, Tag ${i + 1}: Tag name is required (cannot be empty)`)
-        } else {
-          // 校验 tag 格式
-          if (/\s/.test(tag)) {
-            errors.push(`Table ${index + 1}, Tag "${tag}": Cannot contain spaces or whitespace`)
+          // 安全检查：node 不能为 undefined
+          if (!node) {
+            errors.push(`Table ${index + 1}, Node ${i + 1}: Node is undefined`)
+            continue
           }
-          if (!/^[a-z][a-z0-9_-]*$/.test(tag)) {
-            errors.push(`Table ${index + 1}, Tag "${tag}": Must start with a lowercase letter and contain only lowercase letters, digits, underscores (_), or hyphens (-)`)
+
+          // nodeName 不能为空
+          if (!node.name || node.name === '') {
+            errors.push(`Table ${index + 1}, Node ${i + 1}: Node name is required`)
+          } else {
+            // 校验 nodeName 格式
+            if (/\s/.test(node.name)) {
+              errors.push(`Table ${index + 1}, Node "${node.name}": Cannot contain spaces or whitespace`)
+            }
+            if (!/^[a-z][a-z0-9_-]*$/.test(node.name)) {
+              errors.push(`Table ${index + 1}, Node "${node.name}": Must start with a lowercase letter and contain only lowercase letters, digits, underscores (_), or hyphens (-)`)
+            }
+          }
+
+          // nodeId 不能为空
+          if (!node.nodeId || node.nodeId === '') {
+            errors.push(`Table ${index + 1}, Node ${i + 1}: NodeId is required`)
+          }
+
+          // dataType 必须有效
+          if (node.dataType === undefined || node.dataType === null) {
+            errors.push(`Table ${index + 1}, Node ${i + 1}: Data type is required`)
+          } else if (node.dataType !== DataType.BOOL &&
+                     node.dataType !== DataType.INT &&
+                     node.dataType !== DataType.DOUBLE &&
+                     node.dataType !== DataType.STRING) {
+            errors.push(`Table ${index + 1}, Node ${i + 1}: Invalid data type. Must be BOOL, INT, DOUBLE, or STRING`)
           }
         }
-      }
 
-      // 4. nameList 所有元素不能重复
-      const seenTags = new Set()
-      for (let i = 0; i < nl.length; i++) {
-        const tag = nl[i] as string
-        if (tag !== '') {
-          if (seenTags.has(tag)) {
-            errors.push(`Table ${index + 1}: Duplicate tag name "${tag}" in nameList`)
-          } else {
-            seenTags.add(tag)
+        // 4. nodeList 所有 nodeName 不能重复
+        const seenNames = new Set()
+        for (let i = 0; i < nl.length; i++) {
+          const node = nl[i]
+
+          // 安全检查
+          if (!node) continue
+
+          const nodeName = node.name
+          if (nodeName) {
+            if (seenNames.has(nodeName)) {
+              errors.push(`Table ${index + 1}: Duplicate node name "${nodeName}" in nodeList`)
+            } else {
+              seenNames.add(nodeName)
+            }
           }
         }
       }
@@ -185,21 +251,28 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return errors
     },
 
-    // 校验整个 tableList
-    validateTableList() {
+    // 校验整个 custom module
+    validateCustomModule() {
+      // 如果 custom module 未启用，直接返回有效
+      if (!this.custom.enable) {
+        return {valid: true}
+      }
+
       const allErrors = []
 
       // 1. 先校验每个 table 的内部规则
-      for (let i = 0; i < this.tableList.length; i++) {
-        const table = this.tableList[i] as TableInterface
-        const errors = this.validateSingleTable(table, i)
-        allErrors.push(...errors)
+      for (let i = 0; i < this.custom.tableList.length; i++) {
+        const table = this.custom.tableList[i]
+        if (table) {
+          const errors = this.validateSingleCustomTable(table, i)
+          allErrors.push(...errors)
+        }
       }
 
       // 2. 跨表格 tableName 唯一性校验（仅非空）
       const seenTableNames = new Set()
-      for (let i = 0; i < this.tableList.length; i++) {
-        const tableName = this.tableList[i]?.name
+      for (let i = 0; i < this.custom.tableList.length; i++) {
+        const tableName = this.custom.tableList[i]?.name
         if (tableName !== '') {
           if (seenTableNames.has(tableName)) {
             allErrors.push(`Table name "${tableName}" is duplicated in Table ${i + 1}`)
@@ -232,9 +305,15 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       }
 
       //3. hostCpuSlot 格式必须为 “x,x” x为数字
-      const cpuSlotCheck = this.validateHostCpuSlot()
-      if (!cpuSlotCheck.valid) {
-        return {valid: false, field: 'hostCpuSlot', message: cpuSlotCheck.message}
+      const portCheck = this.validatePort()
+      if (!portCheck.valid) {
+        return {valid: false, field: 'hostCpuSlot', message: portCheck.message}
+      }
+
+      //4. postfix 校验
+      const postfixCheck = this.validatePostfix()
+      if (!postfixCheck.valid) {
+        return {valid: false, field: 'postfix', message: postfixCheck.message}
       }
 
       /** 4.tableList 的 table校验
@@ -255,9 +334,9 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
        * 至少第一个table是有效的 新增！
        */
 
-      const tableCheck = this.validateTableList()
-      if (!tableCheck.valid) {
-        return {valid: false, field: 'tableList', message: tableCheck.message}
+      const customModuleCheck = this.validateCustomModule()
+      if (!customModuleCheck.valid) {
+        return {valid: false, field: 'tableList', message: customModuleCheck.message}
       }
 
       return {valid: true}

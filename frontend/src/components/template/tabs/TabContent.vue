@@ -2,7 +2,7 @@ NEW_FILE_CODE
 <script setup lang="ts">
 import {computed} from 'vue';
 import {useNewTemplateStore} from "@/stores/useNewTemplateStore.ts";
-import {type TableInterface, TagType} from "@/types/template.ts";
+import {type CustomTableInterface, TagType} from "@/types/template.ts";
 import {useLoginUserStore} from "@/stores/useLoginUserStore.ts";
 import {useSystemConfigStore} from "@/stores/useSystemConfigStore.ts";
 const loginUserStore = useLoginUserStore()
@@ -19,7 +19,7 @@ const MAX_TABLE_FIELD_COUNT = computed(() => systemConfigStore.maxTableFieldCoun
 const template = useNewTemplateStore();
 
 // 计算属性：获取当前 table 的数据
-const tableData = computed<TableInterface>(() => {
+const tableData = computed<CustomTableInterface>(() => {
   return template.tableList[props.tableIndex] || {
     name: "",
     tagAddr: "",
