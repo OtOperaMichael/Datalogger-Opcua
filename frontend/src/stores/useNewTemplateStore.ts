@@ -343,43 +343,110 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
 
     },
 
-    addTable() {
-      if (this.tableList.length >= 100) {
+    addTable(moduleName: 'custom' | 'alarm' | 'communication') {
+      if (moduleName === 'custom') {
+        const module = this.custom;
+        if (!module || module.tableList.length >= 100) {
+          return false;
+        }
+
+        module.tableList.push({
+          name: "",
+          nodeType: NodeType.SCALAR,
+          nodeList: Array.from({length: 10}, () => ({
+            name: "",
+            nodeId: "",
+            dataType: DataType.INT
+          }))
+        });
+        return true;
+      } else if (moduleName === 'alarm') {
+        // TODO: Implement alarm module table addition
+        // Alarm module may have different table structure
+        return false;
+      } else if (moduleName === 'communication') {
+        // TODO: Implement communication module table addition
+        // Communication module may have different table structure
         return false;
       }
-      this.tableList.push({
-        name: "",
-        tagAddr: "",
-        tagType: TagType.BOOL,
-        tagNameList: Array(10).fill("")
-      });
-      return true;
+      return false;
     },
 
-    removeTable(index: number) {
-      if (this.tableList.length <= 1) {
+    removeTable(moduleName: 'custom' | 'alarm' | 'communication', index: number) {
+      if (moduleName === 'custom') {
+        const module = this.custom;
+        if (!module || module.tableList.length <= 1) {
+          return false;
+        }
+
+        module.tableList.splice(index, 1);
+        return true;
+      } else if (moduleName === 'alarm') {
+        // TODO: Implement alarm module table removal
+        // Alarm module may have different table structure and removal logic
+        return false;
+      } else if (moduleName === 'communication') {
+        // TODO: Implement communication module table removal
+        // Communication module may have different table structure and removal logic
         return false;
       }
-      this.tableList.splice(index, 1);
-      return true;
+      return false;
     },
 
-    addTagName(tableIndex: number) {
-      const table = this.tableList[tableIndex];
-      if (!table || table.tagNameList.length >= 20) {
+    addTagName(moduleName: 'custom' | 'alarm' | 'communication', tableIndex: number) {
+      if (moduleName === 'custom') {
+        const module = this.custom;
+        if (!module) {
+          return false;
+        }
+
+        const table = module.tableList[tableIndex];
+        if (!table || table.nodeList.length >= 100) {
+          return false;
+        }
+
+        table.nodeList.push({
+          name: "",
+          nodeId: "",
+          dataType: DataType.INT
+        });
+        return true;
+      } else if (moduleName === 'alarm') {
+        // TODO: Implement alarm module tag/node addition
+        // Alarm module may have different node structure
+        return false;
+      } else if (moduleName === 'communication') {
+        // TODO: Implement communication module tag/node addition
+        // Communication module may have different node structure
         return false;
       }
-      table.tagNameList.push("");
-      return true;
+      return false;
     },
 
-    removeTagName(tableIndex: number, tagNameIndex: number) {
-      const table = this.tableList[tableIndex];
-      if (!table || table.tagNameList.length <= 1) {
+    removeTagName(moduleName: 'custom' | 'alarm' | 'communication', tableIndex: number, tagNameIndex: number) {
+      if (moduleName === 'custom') {
+        const module = this.custom;
+        if (!module) {
+          return false;
+        }
+
+        const table = module.tableList[tableIndex];
+        if (!table || table.nodeList.length <= 1) {
+          return false;
+        }
+
+        table.nodeList.splice(tagNameIndex, 1);
+        return true;
+      } else if (moduleName === 'alarm') {
+        // TODO: Implement alarm module tag/node removal
+        // Alarm module may have different node structure and removal logic
+        return false;
+      } else if (moduleName === 'communication') {
+        // TODO: Implement communication module tag/node removal
+        // Communication module may have different node structure and removal logic
         return false;
       }
-      table.tagNameList.splice(tagNameIndex, 1);
-      return true;
+      return false;
     }
   }
 

@@ -1,0 +1,158 @@
+<script setup lang="ts">
+import {computed} from 'vue';
+import {useNewTemplateStore} from "@/stores/useNewTemplateStore.ts";
+import {NodeType, DataType, type CustomTableInterface} from "@/types/template.ts";
+import {useLoginUserStore} from "@/stores/useLoginUserStore.ts";
+import {useSystemConfigStore} from "@/stores/useSystemConfigStore.ts";
+
+const loginUserStore = useLoginUserStore()
+const systemConfigStore = useSystemConfigStore();
+
+
+const props = defineProps<{
+  tableIndex: number
+}>();
+
+const MAX_NODE_COUNT = computed(() => systemConfigStore.maxTableFieldCount || 10);
+
+const template = useNewTemplateStore();
+
+const isDisabled = computed(() => !loginUserStore.getIsLoggedIn || !template.custom.enable);
+
+const tableData = computed<CustomTableInterface>(() => {
+  return template.custom.tableList[props.tableIndex] || {
+    name: "",
+    nodeType: NodeType.SCALAR,
+    nodeList: Array.from({length: 10}, () => ({
+      name: "",
+      nodeId: "",
+      dataType: DataType.INT
+    }))
+  };
+});
+
+const nodeTypeOptions = [
+  {label: 'SCALAR', value: NodeType.SCALAR},
+  {label: 'ARRAY', value: NodeType.ARRAY},
+]
+
+const dataTypeOptions = [
+  {label: 'BOOL', value: DataType.BOOL},
+  {label: 'INT', value: DataType.INT},
+  {label: 'DOUBLE', value: DataType.DOUBLE},
+  {label: 'STRING', value: DataType.STRING},
+]
+
+function addNode() {
+  template.addTagName('custom', props.tableIndex);
+}
+
+function removeNode(index: number) {
+  template.removeTagName('custom', props.tableIndex, index);
+}
+</script>
+
+<template>
+  <div id="tab-header">
+    <div class="inputBox">
+      Table name:
+      <a-input
+        style="width: 200px;"
+        v-model:value="tableData.name"
+        :disabled="isDisabled"
+      />
+    </div>
+    <div class="inputBox">
+      Node type:
+      <a-select
+        style="width: 120px;"
+        v-model:value="tableData.nodeType"
+        :options="nodeTypeOptions"
+        :disabled="isDisabled"
+      />
+    </div>
+  </div>
+
+  <div id="tab-content">
+    <div class="nodeInput" v-for="(node, index) in tableData.nodeList" :key="index">
+      <div class="inputNo">{{ index + 1 }}:</div>
+
+      <a-input
+        placeholder="Node name"
+        style="width: 200px;"
+        v-model:value="node.name"
+        :disabled="isDisabled"
+      />
+
+      <a-input
+        placeholder="Node ID (e.g., ns=2;s=Tag1)"
+        style="width: 200px; margin-left: 10px;"
+        v-model:value="node.nodeId"
+        :disabled="isDisabled"
+      />
+
+      <a-select
+        placeholder="Data type"
+        style="width: 100px; margin-left: 10px;"
+        v-model:value="node.dataType"
+        :options="dataTypeOptions"
+        :disabled="isDisabled"
+      />
+
+      <a-button
+        type="default"
+        size="small"
+        @click="removeNode(index)"
+        :disabled="isDisabled || tableData.nodeList.length <= 1"
+        style="margin-left: 10px; min-width: auto; padding: 0 8px;"
+      >
+        −
+      </a-button>
+    </div>
+
+    <div class="add-node-btn">
+      <a-button
+        type="dashed"
+        @click="addNode"
+        :disabled="isDisabled || tableData.nodeList.length >= MAX_NODE_COUNT"
+      >
+        + Add Node (Max: {{MAX_NODE_COUNT}})
+      </a-button>
+    </div>
+  </div>
+
+</template>
+
+<style scoped>
+#tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+}
+
+#tab-content {
+  margin: 10px;
+}
+
+.nodeInput {
+  display: flex;
+  place-items: center;
+  margin: 5px;
+}
+
+.inputBox {
+  margin: 10px;
+}
+
+.inputNo {
+  margin-left: 10px;
+  margin-right: 10px;
+  width: 30px;
+  text-align: right;
+
+}
+
+.add-node-btn {
+  margin: 10px;
+}
+</style>

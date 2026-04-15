@@ -3,8 +3,10 @@
     <a-col flex="300px">
       <div class="title-bar">
         <img class="logo" src="../assets/logo.jpg" alt="logo"/>
-        <!-- 修改标题样式 -->
-        <div class="title title-enhanced">Datalogger</div>
+        <div class="title title-enhanced">
+          Datalogger
+          <span class="subtitle">opcua</span>
+        </div>
       </div>
     </a-col>
     <a-col flex="auto">
@@ -246,7 +248,18 @@ async function login() {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
-
+.subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, #1890ff, #40a9ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 </style>

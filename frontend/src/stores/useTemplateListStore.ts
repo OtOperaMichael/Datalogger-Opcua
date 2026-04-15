@@ -1,38 +1,67 @@
 import {defineStore} from 'pinia'
-import {TagType, type TemplateInterface} from "@/types/template.ts";
+import {NodeType, DataType, type TemplateInterface} from "@/types/template.ts";
 import request from "@/utils/request.ts";
 import {message} from "ant-design-vue";
 
 export const useTemplateListStore = defineStore("templateListStore", {
   state: () => ({
-    // templateList: [] as TemplateInterface[]
     templateList: [
       {
-        id: "1undefined template",
-        name: "undefined template",
+        id: "1undefined-template",
+        name: "undefined-template",
         sampleInterval: 499,
-        hostCpuSlot: "1,0",
-        tableList: Array.from({length: 10}, () => ({
-          name: "undefined table",
-          tagAddr: "undefined tag",
-          tagType: TagType.BOOL,
-          tagNameList: Array(16).fill("")
-        }))
+        port: "4840",
+        postfix: "",
+        custom: {
+          enable: true,
+          tableList: Array.from({length: 1}, () => ({
+            name: "undefined-table",
+            nodeType: NodeType.SCALAR,
+            nodeList: Array.from({length: 10}, () => ({
+              name: "undefined-node",
+              nodeId: "ns=2;s=undefined",
+              dataType: DataType.INT
+            }))
+          }))
+        },
+        alarm: {
+          enable: false,
+          tableList: []
+        },
+        communication: {
+          enable: false,
+          tableList: []
+        }
       },
       {
-        id: "2fake template",
-        name: "fake template",
+        id: "2fake-template",
+        name: "fake-template",
         sampleInterval: 498,
-        hostCpuSlot: "2,0",
-        tableList: Array.from({length: 10}, () => ({
-          name: "fake table",
-          tagAddr: "fake tag",
-          tagType: TagType.BOOL,
-          tagNameList: Array(16).fill("")
-        }))
+        port: "4840",
+        postfix: "",
+        custom: {
+          enable: true,
+          tableList: Array.from({length: 1}, () => ({
+            name: "fake-table",
+            nodeType: NodeType.SCALAR,
+            nodeList: Array.from({length: 10}, () => ({
+              name: "fake-node",
+              nodeId: "ns=2;s=fake",
+              dataType: DataType.INT
+            }))
+          }))
+        },
+        alarm: {
+          enable: false,
+          tableList: []
+        },
+        communication: {
+          enable: false,
+          tableList: []
+        }
       }
-    ] as TemplateInterface[] //  类型断言确保类型安全
-    ,selectedTemplateIndex: -1
+    ] as TemplateInterface[],
+    selectedTemplateIndex: -1
   }),
 
   actions: {
@@ -51,7 +80,6 @@ export const useTemplateListStore = defineStore("templateListStore", {
     //获取所有template信息
     async getAllTemplates() {
       try {
-        // 请求后端获取所有服务器信息
         let {data} = await request.get("template/getAllTemplates")
         console.log('app loaded, loading templateList from backend:', data.data.templateList)
         this.templateList = data.data.templateList
@@ -63,7 +91,5 @@ export const useTemplateListStore = defineStore("templateListStore", {
     getTemplateByName(templateName: string) {
       return this.templateList.find(tpl => tpl.name === templateName)
     }
-
-
   }
 });

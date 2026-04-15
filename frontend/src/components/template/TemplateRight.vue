@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import {ref, computed} from 'vue';
-import TabContent from "@/components/template/tabs/TabContent.vue";
+import TabCustomModule from "@/components/template/tabs/TabCustomModule.vue";
 import {message} from "ant-design-vue";
 
-const activeKey = ref('1');
+const activeKeyCustomModule = ref('1');
 const outerActiveKey = ref('1');
 import {useNewTemplateStore} from "@/stores/useNewTemplateStore.ts";
 import request from "@/utils/request";
@@ -22,31 +22,39 @@ const systemConfigStore = useSystemConfigStore();
 // 最大表格数量
 const MAX_TABLE_COUNT = computed(() => systemConfigStore.maxTableCount || 10);
 
+// 是否启用自定义数据采集
+const isCustomEnabled = computed({
+  get: () => templateStore.custom.enable,
+  set: (value) => {
+    templateStore.custom.enable = value;
+  }
+});
+
 // 计算属性：生成内部 tabs 列表
-const innerPanes = computed(() => {
-  return templateStore.tableList.map((_, index) => ({
+const innerPanesCustomModule = computed(() => {
+  return templateStore.custom.tableList.map((_, index) => ({
     key: String(index + 1),
     title: `Group ${index + 1}`,
     index: index,
-    closable: templateStore.tableList.length > 1
+    closable: templateStore.custom.tableList.length > 1
   }));
 });
 
 // 添加新 table
-const add = () => {
-  if (templateStore.tableList.length >= MAX_TABLE_COUNT.value) {
+const addTableCustomModule = () => {
+  if (templateStore.custom.tableList.length >= MAX_TABLE_COUNT.value) {
     message.warning(`Maximum number of tables ${MAX_TABLE_COUNT.value} reached'`);
     return;
   }
 
-  const newKey = String(templateStore.tableList.length + 1);
-  activeKey.value = newKey;
-  templateStore.addTable();
+  const newKey = String(templateStore.custom.tableList.length + 1);
+  activeKeyCustomModule.value = newKey;
+  templateStore.addTable("custom");
 };
 
 // 删除 table
-const remove = (targetKey: string) => {
-  if (templateStore.tableList.length <= 1) {
+const removeTableCustomModule = (targetKey: string) => {
+  if (templateStore.custom.tableList.length <= 1) {
     message.warning('At least one table must exist');
     return;
   }
@@ -54,36 +62,36 @@ const remove = (targetKey: string) => {
   const targetIndex = parseInt(targetKey) - 1;
 
   let lastIndex = 0;
-  innerPanes.value.forEach((pane, i) => {
+  innerPanesCustomModule.value.forEach((pane, i) => {
     if (pane.key === targetKey) {
       lastIndex = i - 1;
     }
   });
 
-  templateStore.removeTable(targetIndex);
+  templateStore.removeTable("custom",targetIndex);
 
-  if (templateStore.tableList.length && activeKey.value === targetKey) {
+  if (templateStore.custom.tableList.length && activeKeyCustomModule.value === targetKey) {
     if (lastIndex >= 0) {
-      activeKey.value = String(lastIndex + 1);
+      activeKeyCustomModule.value = String(lastIndex + 1);
     } else {
-      activeKey.value = '1';
+      activeKeyCustomModule.value = '1';
     }
-  } else if (targetIndex < parseInt(activeKey.value) - 1) {
-    activeKey.value = String(parseInt(activeKey.value) - 1);
+  } else if (targetIndex < parseInt(activeKeyCustomModule.value) - 1) {
+    activeKeyCustomModule.value = String(parseInt(activeKeyCustomModule.value) - 1);
   }
 };
 
 // 处理编辑事件
-const onInnerEdit = (targetKey: string | MouseEvent, action: string) => {
+const onInnerEditCustomModule = (targetKey: string | MouseEvent, action: string) => {
   if (!loginUserStore.getIsLoggedIn) {
     message.warning('Please log in first to modify the template.');
     return; // 直接返回，不执行后续操作
   }
 
   if (action === 'add') {
-    add();
+    addTableCustomModule();
   } else {
-    remove(targetKey as string);
+    removeTableCustomModule(targetKey as string);
   }
 };
 
@@ -143,9 +151,12 @@ async function saveTemplate() {
     <div id="templateGeneral">
       <div class="inputBox">
         Template name:
-        <a-input style="width: 200px;"
-                 :disabled="!loginUserStore.getIsLoggedIn"
-                 v-model:value="templateStore.name"/>
+        <a-input
+          style="width: 200px;"
+          placeholder="template name"
+          :disabled="!loginUserStore.getIsLoggedIn"
+          v-model:value="templateStore.name"
+        />
       </div>
       <div class="inputBox">
         Sample interval (ms):
@@ -157,30 +168,52 @@ async function saveTemplate() {
         />
       </div>
       <div class="inputBox">
-        HostCpuSlot:
-        <a-input style="width: 100px;"
-                 :disabled="!loginUserStore.getIsLoggedIn"
-                 v-model:value="templateStore.hostCpuSlot"/>
+        Port:
+        <a-input
+          style="width: 100px;"
+          placeholder="4840"
+          :disabled="!loginUserStore.getIsLoggedIn"
+          v-model:value="templateStore.port"
+        />
+      </div>
+      <div class="inputBox">
+        Postfix:
+        <a-input
+          style="width: 150px;"
+          placeholder="Optional suffix"
+          :disabled="!loginUserStore.getIsLoggedIn"
+          v-model:value="templateStore.postfix"
+        />
       </div>
     </div>
 
     <div id="templateTabs">
       <a-card>
         <a-tabs v-model:activeKey="outerActiveKey" tab-position="left" type="card">
-          <!--module 1: data collecting-->
-          <a-tab-pane key="1" tab="Custom">
+          <!--module 1: custom data collecting-->
+          <a-tab-pane key="1">
+            <template #tab>
+              <span>
+                <a-checkbox
+                  :disabled="!loginUserStore.getIsLoggedIn"
+                  v-model:checked="isCustomEnabled"
+                  @click.stop                  style="margin-right: 8px;"
+                />
+                Custom
+              </span>
+            </template>
             <a-tabs
-              v-model:activeKey="activeKey"
+              v-model:activeKey="activeKeyCustomModule"
               type="editable-card"
-              @edit="onInnerEdit"
+              @edit="onInnerEditCustomModule"
             >
               <a-tab-pane
-                v-for="pane in innerPanes"
+                v-for="pane in innerPanesCustomModule"
                 :key="pane.key"
                 :tab="pane.title"
                 :closable="pane.closable"
               >
-                <TabContent :table-index="pane.index"/>
+                <TabCustomModule :table-index="pane.index"/>
               </a-tab-pane>
             </a-tabs>
           </a-tab-pane>
@@ -190,7 +223,7 @@ async function saveTemplate() {
 
           </a-tab-pane>
 
-          <!--module 3: Plc logger-->
+          <!--module 3: communication logger-->
           <a-tab-pane key="3" tab="Comm">
 
           </a-tab-pane>
