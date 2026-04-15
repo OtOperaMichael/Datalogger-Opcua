@@ -2,7 +2,6 @@ package com.lego.serverTask.protocols.libplctag;
 
 import com.lego.util.DBUtil;
 import io.github.libplctag.Tag;
-import com.lego.common.TagType;
 import lombok.Getter;
 
 import java.util.ArrayList;

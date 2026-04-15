@@ -2,7 +2,7 @@ package com.lego.service.Impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lego.pojo.Template;
+import com.lego.pojo.template.Template;
 import com.lego.service.TemplateService;
 import com.lego.util.DBUtil;
 import com.lego.util.FIlepathUtil;

@@ -1,7 +1,7 @@
 package com.lego.util;
 
 import com.lego.pojo.Server;
-import com.lego.pojo.Template;
+import com.lego.pojo.template.Template;
 import com.lego.service.Impl.TemplateServiceImpl;
 
 /**

@@ -20,7 +20,7 @@ enum DataType {
   STRING,
 }
 
-interface CustomTagInterface {
+interface CustomNodeInterface {
   name: string;
   nodeId: string;
   dataType: DataType;
@@ -29,7 +29,7 @@ interface CustomTagInterface {
 interface CustomTableInterface {
   name: string;
   nodeType: NodeType;
-  nodeList: CustomTagInterface[];
+  nodeList: CustomNodeInterface[];
 }
 
 interface CustomModuleInterface {
@@ -56,7 +56,7 @@ interface TemplateInterface {
 export {
   NodeType,
   DataType,
-  type CustomTagInterface,
+  type CustomNodeInterface,
   type CustomTableInterface,
   type CustomModuleInterface,
   type TemplateInterface

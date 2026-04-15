@@ -39,7 +39,7 @@ public class ServerTaskManager {
     private final Map<String, ScheduledFuture<?>> runningTasks = new ConcurrentHashMap<>();
 
     // serverId -> Datalogger instance
-    private final Map<String, Datalogger> dataloggerInstances = new ConcurrentHashMap<>();
+    private final Map<String, OpcuaDatalogger> dataloggerInstances = new ConcurrentHashMap<>();
 
     private ServerTaskManager() {
     }
@@ -66,7 +66,7 @@ public class ServerTaskManager {
         }
 
         // 创建任务
-        Datalogger task = new Datalogger(server);
+        OpcuaDatalogger task = new OpcuaDatalogger(server);
 
         // 保存 datalogger 实例引用
         dataloggerInstances.put(id, task);
@@ -97,7 +97,7 @@ public class ServerTaskManager {
             future.cancel(true);
 
             // 销毁该 server 的所有 tag 资源
-            Datalogger datalogger = dataloggerInstances.remove(id);
+            OpcuaDatalogger datalogger = dataloggerInstances.remove(id);
             if (datalogger != null) {
                 datalogger.destroyAllTags();
             }
@@ -120,7 +120,7 @@ public class ServerTaskManager {
             future.cancel(true);
 
             // 销毁 tag 资源
-            Datalogger datalogger = dataloggerInstances.get(serverId);
+            OpcuaDatalogger datalogger = dataloggerInstances.get(serverId);
             if (datalogger != null) {
                 datalogger.destroyAllTags();
             }

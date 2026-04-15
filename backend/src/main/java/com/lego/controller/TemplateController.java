@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import com.lego.common.Result;
 import com.lego.common.ResultCodeEnum;
-import com.lego.pojo.Template;
+import com.lego.pojo.template.Template;
 import com.lego.service.Impl.TemplateServiceImpl;
 import com.lego.service.TemplateService;
 import com.lego.util.WebUtil;

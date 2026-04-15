@@ -1,6 +1,6 @@
 package com.lego.service;
 
-import com.lego.pojo.Template;
+import com.lego.pojo.template.Template;
 
 import java.util.List;
 

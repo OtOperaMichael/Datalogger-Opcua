@@ -1,7 +1,7 @@
 import {defineStore} from 'pinia'
 import {
   NodeType, DataType,
-  type CustomTagInterface,
+  type CustomNodeInterface,
   type CustomTableInterface,
   type CustomModuleInterface,
   type TemplateInterface,

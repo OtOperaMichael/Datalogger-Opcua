@@ -2,11 +2,12 @@ package com.lego.util;
 
 
 import com.alibaba.druid.pool.DruidDataSource;
-import com.lego.common.TagType;
 import com.lego.pojo.DBConfig;
 import com.lego.serverTask.DataWriteTask;
 import com.lego.serverTask.protocols.libplctag.CIPTag;
 import com.lego.serverTask.protocols.libplctag.CIPTagGroup;
+import com.lego.serverTask.protocols.opcua.OpcUaNode;
+import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -180,17 +181,16 @@ public class DBUtil {
     /**
      * 创建表
      */
-    public static void createTable(String schemaName, CIPTagGroup tagGroup) {
+    public static void createTable(String schemaName, OpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
-        String safeTableName = sanitizeIdentifier(tagGroup.getName());
+        String safeTableName = sanitizeIdentifier(nodeGroup.getName());
         String fullTableName = safeDbName + "." + safeTableName;
 
-        String type = (tagGroup.getTagType() == TagType.REAL) ? "DOUBLE PRECISION" : "INTEGER";
-
         StringBuilder columns = new StringBuilder();
-        for (String tagName : tagGroup.getTagNames()) {
-            String safeColName = sanitizeIdentifier(tagName);
-            columns.append(safeColName).append(" ").append(type).append(" NOT NULL, ");
+        for (OpcUaNode node : nodeGroup.getNodeList()) {
+            String safeColName = sanitizeIdentifier(node.getName());
+            String sqlType = mapDataTypeToSql(node.getDataType());
+            columns.append(safeColName).append(" ").append(sqlType).append(" NOT NULL, ");
         }
         if (columns.length() > 0) {
             columns.setLength(columns.length() - 2);
@@ -217,17 +217,16 @@ public class DBUtil {
     /**
      * 创建 hyper 表，存储时序数据
      */
-    public static void createHyperTable(String schemaName, CIPTagGroup tagGroup) {
+    public static void createHyperTable(String schemaName, OpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
-        String safeTableName = sanitizeIdentifier(tagGroup.getName());
+        String safeTableName = sanitizeIdentifier(nodeGroup.getName());
         String fullTableName = safeDbName + "." + safeTableName;
 
-        String type = (tagGroup.getTagType() == TagType.REAL) ? "DOUBLE PRECISION" : "INTEGER";
-
         StringBuilder columns = new StringBuilder();
-        for (String tagName : tagGroup.getTagNames()) {
-            String safeColName = sanitizeIdentifier(tagName);
-            columns.append(safeColName).append(" ").append(type).append(" NOT NULL, ");
+        for (OpcUaNode node : nodeGroup.getNodeList()) {
+            String safeColName = sanitizeIdentifier(node.getName());
+            String sqlType = mapDataTypeToSql(node.getDataType());
+            columns.append(safeColName).append(" ").append(sqlType).append(" NOT NULL, ");
         }
         if (columns.length() > 0) {
             columns.setLength(columns.length() - 2);
@@ -241,13 +240,13 @@ public class DBUtil {
              Statement stmt = conn.createStatement()) {
 
             // 1. 检查表在创建前是否存在
-            boolean tableExistedBefore = tableExists(conn, schemaName, tagGroup.getName());
+            boolean tableExistedBefore = tableExists(conn, schemaName, nodeGroup.getName());
 
             // 2. 执行创建表的 SQL
             stmt.execute(sql);
 
             // 3. 检查表是否真的被创建了
-            boolean tableJustCreated = !tableExistedBefore && tableExists(conn, schemaName, tagGroup.getName());
+            boolean tableJustCreated = !tableExistedBefore && tableExists(conn, schemaName, nodeGroup.getName());
 
             // 4. 只有真正创建了新表才记录日志
             if (tableJustCreated) {
@@ -295,6 +294,25 @@ public class DBUtil {
         } catch (SQLException e) {
             System.out.println(schemaName + " Create table failed: " + e.getMessage());
             writeLogToDB(schemaName, "Create table failed: " + e.getMessage());
+        }
+    }
+
+    private static String mapDataTypeToSql(com.lego.pojo.template.custom.DataType dataType) {
+        if (dataType == null) {
+            return "DOUBLE PRECISION";
+        }
+
+        switch (dataType) {
+            case BOOL:
+                return "BOOLEAN";
+            case INT:
+                return "INTEGER";
+            case DOUBLE:
+                return "DOUBLE PRECISION";
+            case STRING:
+                return "TEXT";
+            default:
+                return "DOUBLE PRECISION";
         }
     }
 
@@ -368,6 +386,9 @@ public class DBUtil {
             writeLogToDB(schemaName, "Create log table failed: " + e.getMessage());
         }
     }
+
+
+
 
 
     /**

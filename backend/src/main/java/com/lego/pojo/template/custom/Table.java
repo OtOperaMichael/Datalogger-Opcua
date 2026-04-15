@@ -1,6 +1,5 @@
-package com.lego.pojo;
+package com.lego.pojo.template.custom;
 
-import com.lego.common.TagType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,8 +22,7 @@ import java.util.List;
 public class Table {
 
     private String name;
-    private String tagAddr;
-    private TagType tagType;
+    private NodeType nodeType;
+    private List<Node> nodeList;
 
-    private List<String> tagNameList;
 }
