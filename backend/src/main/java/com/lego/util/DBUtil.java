@@ -4,8 +4,6 @@ package com.lego.util;
 import com.alibaba.druid.pool.DruidDataSource;
 import com.lego.pojo.DBConfig;
 import com.lego.serverTask.DataWriteTask;
-import com.lego.serverTask.protocols.libplctag.CIPTag;
-import com.lego.serverTask.protocols.libplctag.CIPTagGroup;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
 import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 
@@ -33,6 +31,11 @@ public class DBUtil {
     private static volatile boolean configLoaded = false;
 
     private static final String logTableName = "log_message";
+
+    // 日志级别
+    private static final int LOG_LEVEL = SystemConfigUtil.getLogLevel();
+
+    private static final Integer databaseRetentionDays = SystemConfigUtil.getDatabaseRetentionDays();
 
     /**
      * 初始化连接池（只调用一次）
@@ -87,7 +90,7 @@ public class DBUtil {
                 // 创建数据库app, 用于存储app日志
                 createSchemaIfNotExists("app");
 
-                writeLogToDB("app", "TimescaleDB connection pool initialized");
+                logInfo("app", "TimescaleDB connection pool initialized");
                 System.out.println("TimescaleDB connection pool initialized");
 
                 return configLoaded;
@@ -129,7 +132,7 @@ public class DBUtil {
             stmt.execute(sql);
             createLogTable(schemaName);
             System.out.println("Schema created: " + schemaName);
-            writeLogToDB(schemaName, "schema created for server: " + schemaName);
+            logInfo(schemaName, "schema created for server: " + schemaName);
 
         }
     }
@@ -141,7 +144,7 @@ public class DBUtil {
 
         // 先检查数据库是否存在
         if (!schemaExists(schemaName)) {
-            writeLogToDB("app", "TimescaleDB database does not exist, skip deletion: " + schemaName);
+            logWarning("app", "TimescaleDB database does not exist, skip deletion: " + schemaName);
             return;
         }
 
@@ -149,7 +152,7 @@ public class DBUtil {
              Statement stmt = conn.createStatement()) {
             String sql = "DROP SCHEMA IF EXISTS " + schemaName + " CASCADE";
             stmt.execute(sql);
-            writeLogToDB("app", "TimescaleDB database deleted for server: " + schemaName);
+            logInfo("app", "TimescaleDB database deleted for server: " + schemaName);
 
         }
     }
@@ -205,11 +208,11 @@ public class DBUtil {
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
             System.out.println("Table " + fullTableName + " created");
-            writeLogToDB(schemaName, "Table " + fullTableName + " created");
+            logInfo(schemaName, "Table " + fullTableName + " created");
 
         } catch (SQLException e) {
             System.err.println("Create table failed: " + e.getMessage());
-            writeLogToDB(schemaName, "Create table failed: " + e.getMessage());
+            logError(schemaName, "Create table failed: " + e.getMessage());
 
         }
     }
@@ -251,7 +254,7 @@ public class DBUtil {
             // 4. 只有真正创建了新表才记录日志
             if (tableJustCreated) {
                 System.out.println(schemaName + " : " + fullTableName + " created");
-                writeLogToDB(schemaName, fullTableName + " created");
+                logInfo(schemaName, fullTableName + " created");
             }
 
             // 如果是新表，尝试创建 hypertable（需 superuser 权限）
@@ -268,18 +271,18 @@ public class DBUtil {
 
                 if (hypertableJustCreated) {
                     System.out.println(schemaName + " : " + fullTableName + " Hypertable created");
-                    writeLogToDB(schemaName, fullTableName + " Hypertable created");
+                    logInfo(schemaName, fullTableName + " Hypertable created");
                 }
 
-                // 设置数据保留策略为 30 天
+                // 设置数据保留策略（从配置获取天数）
                 try {
-                    String retentionSql = "SELECT add_retention_policy('" + fullTableName + "', INTERVAL '30 days', if_not_exists => true)";
+                    String retentionSql = "SELECT add_retention_policy('" + fullTableName + "', INTERVAL '" + databaseRetentionDays + " days', if_not_exists => true)";
                     stmt.execute(retentionSql);
 
                     // 只有新表才记录保留策略日志
                     if (tableJustCreated) {
-                        System.out.println(schemaName + "." + safeTableName + " retention policy set to 30 days");
-                        writeLogToDB(schemaName, safeTableName + " retention policy set to 30 days");
+                        System.out.println(schemaName + "." + safeTableName + " retention policy set to " + databaseRetentionDays + " days");
+                        logInfo(schemaName, safeTableName + " retention policy set to " + databaseRetentionDays + " days");
                     }
                 } catch (SQLException e) {
                     // 可能已存在保留策略或权限不足
@@ -293,7 +296,7 @@ public class DBUtil {
 
         } catch (SQLException e) {
             System.out.println(schemaName + " Create table failed: " + e.getMessage());
-            writeLogToDB(schemaName, "Create table failed: " + e.getMessage());
+            logError(schemaName, "Create table failed: " + e.getMessage());
         }
     }
 
@@ -354,18 +357,18 @@ public class DBUtil {
 
                 if (hypertableJustCreated) {
                     System.out.println(schemaName + " Log hypertable created");
-                    writeLogToDB(schemaName, "Log hypertable created");
+                    logInfo(schemaName, "Log hypertable created");
                 }
 
-                // 设置数据保留策略为 30 天
+                // 设置数据保留策略（从配置获取天数）
                 try {
-                    String retentionSql = "SELECT add_retention_policy('" + fullTableName + "', INTERVAL '30 days', if_not_exists => true)";
+                    String retentionSql = "SELECT add_retention_policy('" + fullTableName + "', INTERVAL '" + databaseRetentionDays + " days', if_not_exists => true)";
                     stmt.execute(retentionSql);
 
                     // 只有新表才记录保留策略日志
                     if (tableJustCreated) {
-                        System.out.println(schemaName + "." + logTableName + " retention policy set to 30 days");
-                        writeLogToDB(schemaName, logTableName + " retention policy set to 30 days");
+                        System.out.println(schemaName + "." + logTableName + " retention policy set to " + databaseRetentionDays + " days");
+                        logInfo(schemaName, logTableName + " retention policy set to " + databaseRetentionDays + " days");
                     }
                 } catch (SQLException e) {
                     // 可能已存在保留策略或权限不足
@@ -383,40 +386,7 @@ public class DBUtil {
 
         } catch (SQLException e) {
             System.out.println(schemaName + " Create log table failed: " + e.getMessage());
-            writeLogToDB(schemaName, "Create log table failed: " + e.getMessage());
-        }
-    }
-
-
-
-
-
-    /**
-     * 插入数据
-     */
-    public static void insertData(String schemaName, CIPTagGroup tagGroup) {
-        String safeDbName = sanitizeIdentifier(schemaName);
-        String safeTableName = sanitizeIdentifier(tagGroup.getName());
-        String fullTableName = safeDbName + "." + safeTableName;
-        List<CIPTag> tagList = tagGroup.getCipTagArrayList();
-
-        List<String> columns = tagGroup.getTagNames().stream()
-                .map(DBUtil::sanitizeIdentifier)
-                .collect(Collectors.toList());
-
-        String colStr = String.join(", ", columns);
-        String placeholderStr = columns.stream().map(c -> "?").collect(Collectors.joining(", "));
-        String sql = "INSERT INTO " + fullTableName + " (" + colStr + ") VALUES (" + placeholderStr + ")";
-
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            for (int i = 0; i < tagList.size(); i++) {
-                pstmt.setObject(i + 1, tagList.get(i).getValAsDouble());
-            }
-            pstmt.executeUpdate();
-        } catch (SQLException e) {
-            writeLogToDB(schemaName, "Insert failed into " + fullTableName + ": " + e.getMessage());
-
+            logError(schemaName, "Create log table failed: " + e.getMessage());
         }
     }
 
@@ -465,8 +435,8 @@ public class DBUtil {
                 // 设置 time 参数
                 pstmt.setTimestamp(paramIndex++, Timestamp.from(task.getTimestamp()));
 
-                // 设置数据列参数
-                for (Double value : task.getData().values()) {
+                // 设置数据列参数（使用 setObject 支持多种类型）
+                for (Object value : task.getData().values()) {
                     pstmt.setObject(paramIndex++, value);
                 }
             }
@@ -474,14 +444,14 @@ public class DBUtil {
             pstmt.executeUpdate();
 
         } catch (SQLException e) {
-            writeLogToDB(schemaName, "Batch insert failed into " + fullTableName + ": " + e.getMessage());
+            logError(schemaName, "Batch insert failed into " + fullTableName + ": " + e.getMessage());
         }
     }
 
     /**
-     * 写入日志数据到 TimescaleDB
+     * 写入日志数据到 TimescaleDB（不支持占位符）
      */
-    public static void writeLogToDB(String schemaName, String log) {
+    public static void logInfo(String schemaName, String log) {
         // 如果数据库未初始化，只打印控制台日志，不抛异常
         if (!configLoaded || dataSource == null) {
             System.out.println("[LOG][" + schemaName + "] " + log);
@@ -506,6 +476,154 @@ public class DBUtil {
         }
     }
 
+    /**
+     * 写入日志数据到 TimescaleDB（支持 SLF4J 风格的占位符）
+     * 使用示例：
+     * logInfo("server1", "Creating subscription for nodeGroup: {}", groupName);
+     * logInfo("server1", "Sample interval: {}ms, Group name: {}", sampleInterval, groupName);
+     *
+     * @param schemaName 数据库模式名称
+     * @param format     日志格式字符串，使用 {} 作为占位符
+     * @param args       占位符对应的参数
+     */
+    public static void logInfo(String schemaName, String format, Object... args) {
+        // 格式化日志消息
+        String formattedLog = formatLogMessage(format, args);
+
+        // 调用原有的 logInfo 方法
+        logInfo(schemaName, formattedLog);
+    }
+
+    /**
+     * 写入日志数据到 TimescaleDB（支持 SLF4J 风格的占位符）
+     * 自动添加 "Warning:" 前缀
+     *
+     * @param schemaName 数据库模式名称
+     * @param format     日志格式字符串，使用 {} 作为占位符
+     * @param args       占位符对应的参数
+     */
+    public static void logWarning(String schemaName, String format, Object... args) {
+        // 格式化日志消息
+        String formattedLog = "Warning: " + formatLogMessage(format, args);
+
+        // 调用原有的 logInfo 方法
+        logInfo(schemaName, formattedLog);
+    }
+
+    /**
+     * 写入日志数据到 TimescaleDB（支持 SLF4J 风格的占位符）
+     * 自动添加 "Error:" 前缀
+     *
+     * @param schemaName 数据库模式名称
+     * @param format     日志格式字符串，使用 {} 作为占位符
+     * @param args       占位符对应的参数
+     */
+    public static void logError(String schemaName, String format, Object... args) {
+        // 格式化日志消息
+        String formattedLog = "Error: " + formatLogMessage(format, args);
+
+        // 调用原有的 logInfo 方法
+        logInfo(schemaName, formattedLog);
+    }
+
+    /**
+     * 写入日志数据到 TimescaleDB（支持 SLF4J 风格的占位符）
+     * 自动添加 "Debug:" 前缀
+     * Level: L1
+     *
+     * @param schemaName 数据库模式名称
+     * @param format     日志格式字符串，使用 {} 作为占位符
+     * @param args       占位符对应的参数
+     */
+    public static void logDebugL1(String schemaName, String format, Object... args) {
+        if (LOG_LEVEL >= 1) {
+            // 格式化日志消息
+            String formattedLog = "Debug: " + formatLogMessage(format, args);
+
+            // 调用原有的 logInfo 方法
+            logInfo(schemaName, formattedLog);
+        }
+    }
+
+    /**
+     * 写入日志数据到 TimescaleDB（支持 SLF4J 风格的占位符）
+     * 自动添加 "Debug:" 前缀
+     * Level: L2
+     *
+     * @param schemaName 数据库模式名称
+     * @param format     日志格式字符串，使用 {} 作为占位符
+     * @param args       占位符对应的参数
+     */
+    public static void logDebugL2(String schemaName, String format, Object... args) {
+        if (LOG_LEVEL >= 2) {
+            // 格式化日志消息
+            String formattedLog = "Debug: " + formatLogMessage(format, args);
+
+            // 调用原有的 logInfo 方法
+            logInfo(schemaName, formattedLog);
+        }
+    }
+
+    /**
+     * 格式化日志消息，支持 SLF4J 风格的 {} 占位符
+     *
+     * @param format 格式字符串
+     * @param args   参数数组
+     * @return 格式化后的字符串
+     */
+    private static String formatLogMessage(String format, Object... args) {
+        if (format == null) {
+            return "null";
+        }
+
+        if (args == null || args.length == 0) {
+            return format;
+        }
+
+        StringBuilder result = new StringBuilder();
+        int argIndex = 0;
+        int formatIndex = 0;
+
+        while (formatIndex < format.length()) {
+            // 查找下一个 {}
+            int placeholderStart = format.indexOf("{}", formatIndex);
+
+            if (placeholderStart == -1) {
+                // 没有更多占位符，追加剩余部分
+                result.append(format.substring(formatIndex));
+                break;
+            }
+
+            // 追加占位符之前的文本
+            result.append(format, formatIndex, placeholderStart);
+
+            // 替换占位符为参数值
+            if (argIndex < args.length) {
+                result.append(args[argIndex] == null ? "null" : args[argIndex].toString());
+                argIndex++;
+            } else {
+                // 参数不足，保留占位符
+                result.append("{}");
+            }
+
+            // 移动到下一个位置
+            formatIndex = placeholderStart + 2;
+        }
+
+        // 如果还有多余的参数，追加到末尾
+        if (argIndex < args.length) {
+            result.append(" [");
+            for (int i = argIndex; i < args.length; i++) {
+                if (i > argIndex) {
+                    result.append(", ");
+                }
+                result.append(args[i]);
+            }
+            result.append("]");
+        }
+
+        return result.toString();
+    }
 
     //查询数据
     public static List<Map<String, Object>> queryData(String schemaName, String tableName, String startTime, String endTime) {
@@ -540,7 +658,7 @@ public class DBUtil {
         } catch (SQLException e) {
             e.printStackTrace();
             System.err.println("TimescaleDB query error: " + e.getMessage());
-            writeLogToDB(schemaName, "TimescaleDB query error: " + e.getMessage());
+            logError(schemaName, "TimescaleDB query error: " + e.getMessage());
 
         }
 
@@ -603,7 +721,7 @@ public class DBUtil {
                 System.out.println("TimescaleDB datasource shut down");
             } catch (Exception e) {
                 System.err.println("Error closing Druid DataSource: " + e.getMessage());
-                writeLogToDB("app", "Error closing Druid DataSource: " + e.getMessage());
+                logError("app", "Error closing Druid DataSource: " + e.getMessage());
 
             }
             dataSource = null;
@@ -628,12 +746,12 @@ public class DBUtil {
                 try {
                     DriverManager.deregisterDriver(driver);
                     System.out.println("Deregistering JDBC driver: " + driver.getClass().getName());
-                    writeLogToDB("app", "Deregistered JDBC driver: " + driver.getClass().getName());
+                    logInfo("app", "Deregistered JDBC driver: " + driver.getClass().getName());
 
                     System.out.println("Deregistered JDBC driver completed");
                 } catch (SQLException e) {
                     System.err.println("Failed to deregister driver: " + e.getMessage());
-                    writeLogToDB("app", "Failed to deregister driver: " + e.getMessage());
+                    logError("app", "Failed to deregister driver: " + e.getMessage());
 
                 }
             }
@@ -674,12 +792,12 @@ public class DBUtil {
             }
         } catch (ClassNotFoundException e) {
             System.err.println("PostgreSQL driver not found: " + e.getMessage());
-            writeLogToDB("app", "PostgreSQL driver not found: " + e.getMessage());
+            logInfo("app", "PostgreSQL driver not found: " + e.getMessage());
 
             return false;
         } catch (SQLException e) {
             System.err.println("PostgreSQL test connection failed: " + e.getMessage());
-            writeLogToDB("app", "PostgreSQL test connection failed: " + e.getMessage());
+            logError("app", "PostgreSQL test connection failed: " + e.getMessage());
 
             return false;
         } finally {
@@ -706,11 +824,11 @@ public class DBUtil {
             boolean deleted = file.delete();
             if (deleted) {
                 System.out.println("Deleted TimescaleDB config file: " + path);
-                writeLogToDB("app", "Deleted TimescaleDB config file: " + path);
+                logInfo("app", "Deleted TimescaleDB config file: " + path);
 
             } else {
                 System.err.println("Failed to delete TimescaleDB config file: " + path);
-                writeLogToDB("app", "Failed to delete TimescaleDB config file: " + path);
+                logInfo("app", "Failed to delete TimescaleDB config file: " + path);
 
             }
             configLoaded = false;
@@ -779,7 +897,7 @@ public class DBUtil {
                 logMessages.add(formattedLog);
             }
         } catch (SQLException e) {
-            writeLogToDB("app", "Query logs failed for schema " + schemaName + ": " + e.getMessage());
+            logInfo("app", "Query logs failed for schema " + schemaName + ": " + e.getMessage());
             e.printStackTrace();
         }
 

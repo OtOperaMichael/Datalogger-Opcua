@@ -1,5 +1,6 @@
 package com.lego.listener;
 
+import com.lego.util.LogUtil;
 import com.lego.util.SystemConfigUtil;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
@@ -27,7 +28,7 @@ public class AppLifecycleListener implements ServletContextListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
-        System.out.println("Application starting...");
+        LogUtil.logInfo("app", "Application starting...");
 
         // 初始化数据库
         if (DBUtil.init()) {
@@ -44,17 +45,17 @@ public class AppLifecycleListener implements ServletContextListener {
                 }
             }
 
-            System.out.println("Application started.");
-            DBUtil.writeLogToDB("app", "Application started.");
+            LogUtil.logInfo("app", "Application started.");
+            DBUtil.logInfo("app", "Application started.");
             return;
         }
-        System.out.println("Application started, but failed to initialize database.");
-
+        
+        LogUtil.logWarning("app", "Application started, but failed to initialize database.");
     }
 
     @Override
     public void contextDestroyed(ServletContextEvent sce) {
-        System.out.println("Application shutting down...");
+        LogUtil.logInfo("app", "Application shutting down...");
 
         // 1. 关闭数据源（如果是 Druid）
         DBUtil.close();
@@ -71,11 +72,11 @@ public class AppLifecycleListener implements ServletContextListener {
             Method method = clazz.getMethod("shutdown");
             method.invoke(null);
         } catch (Exception e) {
-            System.err.println("Failed to shutdown MySQL cleanup thread: " + e.getMessage());
-            DBUtil.writeLogToDB("app", "Failed to shutdown MySQL cleanup thread: " + e.getMessage());
+            LogUtil.logError("app", "Failed to shutdown MySQL cleanup thread: {}", e.getMessage());
+            DBUtil.logInfo("app", "Failed to shutdown MySQL cleanup thread: {}", e.getMessage());
         }
 
-        System.out.println("Application shut down.");
-        DBUtil.writeLogToDB("app", "Application shut down.");
+        LogUtil.logInfo("app", "Application shut down.");
+        DBUtil.logInfo("app", "Application shut down.");
     }
 }

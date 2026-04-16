@@ -61,7 +61,7 @@ public class TemplateServiceImpl implements TemplateService {
         File file = new File(JSON_FILE_PATH);
         if (!file.exists()) {
             System.out.println("templateList.json not found. Starting with empty template list.");
-            DBUtil.writeLogToDB("app", "templateList.json not found. Starting with empty template list.");
+            DBUtil.logWarning("app", "templateList.json not found. Starting with empty template list.");
             return;
         }
 
@@ -72,10 +72,10 @@ public class TemplateServiceImpl implements TemplateService {
             templateList.clear();
             templateList.addAll(loaded);
             System.out.println("Loaded " + templateList.size() + " templates from " + JSON_FILE_PATH);
-            DBUtil.writeLogToDB("app", "Loaded " + templateList.size() + " templates from " + JSON_FILE_PATH);
+            DBUtil.logInfo("app", "Loaded " + templateList.size() + " templates from " + JSON_FILE_PATH);
         } catch (IOException e) {
             System.err.println("Failed to load templateList.json: " + e.getMessage());
-            DBUtil.writeLogToDB("app", "Failed to load templateList.json: " + e.getMessage());
+            DBUtil.logError("app", "Failed to load templateList.json: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -88,7 +88,7 @@ public class TemplateServiceImpl implements TemplateService {
         ObjectMapper mapper = JsonUtil.getObjectMapper();
         mapper.writerWithDefaultPrettyPrinter().writeValue(file, templateList);
         System.out.println("Saved " + templateList.size() + " templates to " + JSON_FILE_PATH);
-        DBUtil.writeLogToDB("app", "Template saved: " + templateList.size() + " templates to " + JSON_FILE_PATH);
+        DBUtil.logInfo("app", "Template saved: " + templateList.size() + " templates to " + JSON_FILE_PATH);
     }
 
     // ----------------- Service Methods -----------------
@@ -119,7 +119,7 @@ public class TemplateServiceImpl implements TemplateService {
                 if (t.getId().equalsIgnoreCase(newTemplate.getId())) {
                     templateList.set(i, newTemplate);
                     System.out.println("Updated template: " + newTemplate.getId());
-                    DBUtil.writeLogToDB("app", "Template updated: " + newTemplate.getId());
+                    DBUtil.logInfo("app", "Template updated: " + newTemplate.getId());
                     found = true;
                     break;
                 }
@@ -128,17 +128,17 @@ public class TemplateServiceImpl implements TemplateService {
                 newTemplate.setId(templateList.size() + 1 + "_" + newTemplate.getName());
                 templateList.add(newTemplate);
                 System.out.println("Added new template: " + newTemplate.getId());
-                DBUtil.writeLogToDB("app", "New template added: " + newTemplate.getId());
+                DBUtil.logInfo("app", "New template added: " + newTemplate.getId());
             }
 
             saveToFile();
             System.out.println("Saved templateList.json");
-            DBUtil.writeLogToDB("app", "Template saved: templateList.json");
+            DBUtil.logInfo("app", "Template saved: templateList.json");
             return new ArrayList<>(templateList);
         } catch (IOException e) {
             e.printStackTrace();
             System.out.println("Failed to save template" + e.getMessage());
-            DBUtil.writeLogToDB("app", "Failed to save template: " + e.getMessage());
+            DBUtil.logError("app", "Failed to save template: " + e.getMessage());
             return new ArrayList<>(templateList);
         } finally {
             lock.writeLock().unlock();
@@ -153,13 +153,13 @@ public class TemplateServiceImpl implements TemplateService {
         try {
             templateList.removeIf(t -> (t.getId().equalsIgnoreCase(id)));
             System.out.println("Deleted template: " + id);
-            DBUtil.writeLogToDB("app", "Template deleted: " + id);
+            DBUtil.logInfo("app", "Template deleted: " + id);
             saveToFile();
             return new ArrayList<>(templateList);
         } catch (IOException e) {
             e.printStackTrace();
             System.out.println("Failed to delete template" + e.getMessage());
-            DBUtil.writeLogToDB("app", "Failed to delete template: " + e.getMessage());
+            DBUtil.logError("app", "Failed to delete template: " + e.getMessage());
             return new ArrayList<>(templateList);
         } finally {
             lock.writeLock().unlock();

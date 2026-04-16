@@ -10,19 +10,16 @@ package com.lego.serverTask;
  * @Version 1.0
  */
 
-import com.lego.serverTask.protocols.libplctag.CIPTag;
-import com.lego.serverTask.protocols.libplctag.CIPTagGroup;
+
+import com.lego.serverTask.protocols.opcua.OpcUaNode;
+import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 import com.lego.util.DBUtil;
-import com.lego.util.SystemConfigUtil;
+import com.lego.util.LogUtil;
 import com.lego.util.ThreadDiagnosticUtil;
 
-import javax.sound.midi.Soundbank;
 import java.util.LinkedHashMap;
 import java.util.concurrent.*;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 全局数据写入队列管理器
@@ -61,9 +58,6 @@ public class GlobalDataQueue {
     // 监控循环计数器
     private final AtomicInteger monitorCycleCount = new AtomicInteger(0);
 
-    // 日志级别
-    private static final int LOG_LEVEL = SystemConfigUtil.getLogLevel();
-
     private GlobalDataQueue() {
         this.dataQueue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
         this.consumerPool = new DataConsumerPool(dataQueue);
@@ -81,8 +75,8 @@ public class GlobalDataQueue {
         // 启动定时监控任务
         startMonitoring();
 
-        DBUtil.writeLogToDB("app", "Global data queue initialized with capacity: " + QUEUE_CAPACITY);
-        System.out.println("Global data queue initialized with capacity: " + QUEUE_CAPACITY);
+        DBUtil.logInfo("app", "Global data queue initialized with capacity: {}", QUEUE_CAPACITY);
+        LogUtil.logInfo("app", "Global data queue initialized with capacity: {}", QUEUE_CAPACITY);
     }
 
     public static GlobalDataQueue getInstance() {
@@ -97,15 +91,22 @@ public class GlobalDataQueue {
     }
 
     /**
-     * 添加custom监控数据到队列
+     * 添加custom监控数据到队列（OPC UA 数据）
+     * 根据节点的实际数据类型保持原始类型
      */
-    public boolean enqueueCustomData(String serverName, CIPTagGroup tagGroup) {
-
+    public boolean enqueueCustomData(String serverName, OpcUaNodeGroup nodeGroup) {
         try {
-            String tableName = tagGroup.getName();
-            LinkedHashMap<String, Double> data = new LinkedHashMap<>();
-            for (CIPTag tag : tagGroup.getCipTagArrayList()) {
-                data.put(tag.getTagName(), tag.getValAsDouble());
+            String tableName = nodeGroup.getName();
+            LinkedHashMap<String, Object> data = new LinkedHashMap<>();
+
+            // 遍历 nodeGroup 中的所有节点，提取数据并保持原始类型
+            for (OpcUaNode node : nodeGroup.getNodeList()) {
+                Object value = node.getNewValue();
+
+                // 只添加非 null 的值
+                if (value != null) {
+                    data.put(node.getName(), value);
+                }
             }
 
             DataWriteTask task = new DataWriteTask(serverName, tableName, data);
@@ -113,18 +114,23 @@ public class GlobalDataQueue {
 
             if (!success) {
                 // 队列已满
-                DBUtil.writeLogToDB("app", "Err:: Global data queue is full! Server: " + serverName +
-                        ", Queue size: " + dataQueue.size());
-                System.err.println("Global data queue is full! Server: " + serverName);
+                DBUtil.logWarning("app", "Global data queue is full! Server: {}, Queue size: {}", 
+                    serverName, dataQueue.size());
+                LogUtil.logWarning("app", "Global data queue is full! Server: {}, Queue size: {}", 
+                    serverName, dataQueue.size());
             }
 
             return success;
         } catch (Exception e) {
-            DBUtil.writeLogToDB("app", "Err:: Failed to enqueue data for server " + serverName + ": " + e.getMessage());
+            DBUtil.logError("app", "Failed to enqueue OPC UA data for server {}: {}", 
+                serverName, e.getMessage());
+            LogUtil.logError("app", "Failed to enqueue OPC UA data for server {}: {}", 
+                serverName, e.getMessage());
             e.printStackTrace();
             return false;
         }
     }
+
 
     /**
      * 启动定时监控任务
@@ -148,40 +154,35 @@ public class GlobalDataQueue {
                                 usagePercent * 100,
                                 getProcessingCount()
                         );
-                        DBUtil.writeLogToDB("app", logMessage);
+                        DBUtil.logInfo("app", logMessage);
                     }
 
                     // 每 2 次(20s)打印一次线程状态
                     if (cycleCount % THREAD_STATUS_INTERVAL == 0) {
                         // 每10秒打印线程状态
-                        if (LOG_LEVEL > 1) {
-                            // 每隔 6 次打印一次线程状态
-                            String threadStatus = ThreadDiagnosticUtil.getThreadStatus(true).toString();
-                            System.out.println(threadStatus);
-                            DBUtil.writeLogToDB("app", threadStatus);
-                        }
+                        // 每隔 6 次打印一次线程状态
+                        String threadStatus = ThreadDiagnosticUtil.getThreadStatus(true).toString();
+                        LogUtil.logDebugL1("app", "{}", threadStatus);
+                        DBUtil.logDebugL1("app", "{}", threadStatus);
                     }
 
                 } else {
                     // 过载时立即写入告警日志（每次都写）
-                    String warningMessage = String.format(
-                            "WARNING: Queue usage high! Total: %d, Current: %d, Usage: %.2f%%, Processed: %d",
-                            QUEUE_CAPACITY,
-                            currentSize,
-                            usagePercent * 100,
-                            getProcessingCount()
-                    );
-                    DBUtil.writeLogToDB("app", warningMessage);
-                    System.err.println(warningMessage);
+                    DBUtil.logWarning("app", "WARNING: Queue usage high! Total: {}, Current: {}, Usage: {:.2f}%, Processed: {}", 
+                        QUEUE_CAPACITY, currentSize, usagePercent * 100, getProcessingCount());
+                    LogUtil.logWarning("app", "WARNING: Queue usage high! Total: {}, Current: {}, Usage: {:.2f}%, Processed: {}", 
+                        QUEUE_CAPACITY, currentSize, usagePercent * 100, getProcessingCount());
                 }
 
             } catch (Exception e) {
-                DBUtil.writeLogToDB("app", "Error in queue monitoring: " + e.getMessage());
+                DBUtil.logError("app", "Error in queue monitoring: {}", e.getMessage());
+                LogUtil.logError("app", "Error in queue monitoring: {}", e.getMessage());
                 e.printStackTrace();
             }
         }, MONITOR_INTERVAL_SECONDS, MONITOR_INTERVAL_SECONDS, TimeUnit.SECONDS);
 
-        DBUtil.writeLogToDB("app", "Queue monitoring started with interval: " + MONITOR_INTERVAL_SECONDS + "s");
+        DBUtil.logInfo("app", "Queue monitoring started with interval: {}s", MONITOR_INTERVAL_SECONDS);
+        LogUtil.logInfo("app", "Queue monitoring started with interval: {}s", MONITOR_INTERVAL_SECONDS);
     }
 
     /**
@@ -221,8 +222,8 @@ public class GlobalDataQueue {
      * 关闭队列和消费者线程池
      */
     public void shutdown() {
-        System.out.println("Shutting down global data queue...");
-        DBUtil.writeLogToDB("app", "Shutting down global data queue...");
+        LogUtil.logInfo("app", "Shutting down global data queue...");
+        DBUtil.logInfo("app", "Shutting down global data queue...");
 
         // 先停止监控线程
         if (monitorScheduler != null) {
@@ -242,8 +243,8 @@ public class GlobalDataQueue {
             consumerPool.stop();
         }
 
-        System.out.println("Global data queue shut down complete. Remaining items: " + dataQueue.size());
-        DBUtil.writeLogToDB("app", "Global data queue shut down complete. Remaining items: " + dataQueue.size());
+        LogUtil.logInfo("app", "Global data queue shut down complete. Remaining items: {}", dataQueue.size());
+        DBUtil.logInfo("app", "Global data queue shut down complete. Remaining items: {}", dataQueue.size());
     }
 
 

@@ -30,6 +30,9 @@ public class SystemConfig {
     // 前端模版table最大字段数量
     private Integer maxTableFieldCount;
 
+    // 数据库保留天数
+    private Integer databaseRetenionDays;
+
     // 数据采集线程数量
     private Integer dataCollectionThreads;
 

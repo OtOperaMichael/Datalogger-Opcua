@@ -22,7 +22,8 @@ import java.util.List;
 public class Table {
 
     private String name;
-    private NodeType nodeType;
+    private Integer sampleInterval;
+    private NodeGroupType nodeGroupType;
     private List<Node> nodeList;
 
 }

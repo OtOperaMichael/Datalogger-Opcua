@@ -24,9 +24,9 @@ public class DataWriteTask {
     private final String serverName;
     private final String tableName;
     private final Instant timestamp;
-    private final LinkedHashMap<String, Double> data;
+    private final LinkedHashMap<String, Object> data;
 
-    public DataWriteTask(String serverName, String tableName,LinkedHashMap<String, Double> data) {
+    public DataWriteTask(String serverName, String tableName, LinkedHashMap<String, Object> data) {
         this.serverName = serverName;
         this.tableName = tableName;
         this.data = data;

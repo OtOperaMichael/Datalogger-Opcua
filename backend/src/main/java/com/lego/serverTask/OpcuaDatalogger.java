@@ -1,12 +1,14 @@
 package com.lego.serverTask;
 
+import com.lego.pojo.template.custom.NodeGroupType;
 import com.lego.pojo.template.custom.Table;
 import com.lego.pojo.Server;
 import com.lego.pojo.template.Template;
-import com.lego.serverTask.protocols.libplctag.CIPTagGroup;
+import com.lego.serverTask.protocols.opcua.OpcUaNode;
 import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 import com.lego.util.DBUtil;
 import com.lego.util.TemplateUtil;
+import lombok.Getter;
 import org.eclipse.milo.opcua.sdk.client.DiscoveryClient;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClientConfig;
@@ -18,10 +20,12 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription;
 
+import java.lang.reflect.Array;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ClassName: PlcMonitoringTask
@@ -36,21 +40,26 @@ public class OpcuaDatalogger {
 
     private final String serverName;
     private final String templateName;
-    private  String serverUrl;
-    private  Integer sampleInterval;
+    private final String serverUrl;
     private final Template template;
+    private final boolean customModuleIsEnabled;
+    private final boolean alarmModuleIsEnabled;
+    private final boolean communicationModuleIsEnabled;
 
     private ArrayList<OpcUaNodeGroup> customModuleNodeGroupList = new ArrayList<>();
 
-    private int minute;
-    private int second;
-    private long startTime;
-    private long stopTime;
-    private long costTime;
-    private boolean isTagGroupChanged;
-
     // 引用全局队列
     private final GlobalDataQueue globalDataQueue;
+
+    // 存储每个 nodeGroup 对应的 subscription，用于分组管理
+    private Map<String, OpcUaSubscription> subscriptionMap = new HashMap<>();
+
+    // 保存 client 引用，用于关闭时断开连接
+    private OpcUaClient client;
+
+    // 标记任务是否正在运行
+    @Getter
+    private volatile boolean isRunning = false;
 
     //构造器，初始化tagGroups
     public OpcuaDatalogger(Server server) {
@@ -61,235 +70,407 @@ public class OpcuaDatalogger {
         // 获取全局队列实例
         globalDataQueue = GlobalDataQueue.getInstance();
 
-        //如果需要的template被配置了
-        if (template != null) {
+        if (template == null) {
+            DBUtil.logWarning(serverName, "Template not found for server: " + serverName);
+            customModuleIsEnabled = false;
+            alarmModuleIsEnabled = false;
+            communicationModuleIsEnabled = false;
+            serverUrl = null;
+            return;
+        }
 
-            //create database 为每一个server instance, e.g. P86B
-            if (template.getCustom().isEnable() || template.getAlarm().isEnable() || template.getCommunication().isEnable()) {
-                try {
-                    DBUtil.createSchemaIfNotExists(serverName);
-                } catch (SQLException e) {
-                    throw new RuntimeException(e);
+        customModuleIsEnabled = template.getCustom().isEnable();
+        alarmModuleIsEnabled = template.getAlarm().isEnable();
+        communicationModuleIsEnabled = template.getCommunication().isEnable();
+
+        //create database 为每一个server instance, e.g. P86B
+        if (customModuleIsEnabled || alarmModuleIsEnabled || communicationModuleIsEnabled) {
+            try {
+                DBUtil.createSchemaIfNotExists(serverName);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        String hostIp = server.getHostIP();
+        String port = (template.getPort() != null) ? template.getPort() : "4840";
+        String postfix = (template.getPostfix() != null) ? template.getPostfix() : "";
+        serverUrl = "opc.tcp://" + hostIp + ":" + port + postfix;
+
+        //Module1: custom, 遍历template中的所有table
+        if (customModuleIsEnabled) {
+
+            for (int index = 0; index < template.getCustom().getTablelist().size(); index++) {
+
+                Table table = template.getCustom().getTablelist().get(index);
+                //从前端传来的tagGroup有可能为空，为空则跳过
+                if (!table.getName().isEmpty()) {
+                    OpcUaNodeGroup nodeGroup = new OpcUaNodeGroup(serverName, table);
+                    customModuleNodeGroupList.add(nodeGroup);
+                    //create hyper table for each tagGroup
+                    DBUtil.createHyperTable(serverName, nodeGroup);
+
+                } else {
+                    break;
                 }
             }
-
-            String hostIP = server.getHostIP();
-            String port = (template.getPort() != null) ? template.getPort() : "4840";
-            String postfix = (template.getPostfix() != null) ? template.getPostfix() : "";
-            serverUrl = "opc.tcp://" + hostIP + ":" + port + postfix;
-
-            sampleInterval = template.getSampleInterval();
-
-            //Module1: custom, 遍历template中的所有table
-            if (template.getCustom().isEnable()) {
-
-                for (int index = 0; index < template.getCustom().getTablelist().size(); index++) {
-
-                    Table table = template.getCustom().getTablelist().get(index);
-                    //从前端传来的tagGroup有可能为空，为空则跳过
-                    if (!table.getName().isEmpty()) {
-                        OpcUaNodeGroup nodeGroup = new OpcUaNodeGroup(serverName, table);
-                        customModuleNodeGroupList.add(nodeGroup);
-                        //create hyper table for each tagGroup
-                        DBUtil.createHyperTable(serverName, nodeGroup);
-
-                    } else {
-                        break;
-                    }
-                }
-
-            }
-
-            //Module2: alarm
-
-            //Module3: communication
 
         }
+
+        //Module2: alarm
+
+        //Module3: communication
+
+
     }
-
-
-//    private CIPTagGroup createCipTagGroup(String serverName, Table table) {
-//
-//        List<String> tagNameList = table.getTagNameList();
-//
-//        String tagAddr = "";
-//        TagType tagType;
-//        ArrayList<String> tagNames = new ArrayList<>();
-//
-//        for (int i = 0; i < tagNameList.size(); i++) {
-//            //从前端输入的tagname有可能为空，为空则为无效
-//            if ((tagNameList.get(i) != null) && !tagNameList.get(i).isEmpty()) {
-//                tagNames.add(table.getTagNameList().get(i));
-//            } else {
-//                break;
-//            }
-//        }
-//
-//        StringBuilder str = new StringBuilder();
-//        str.append("protocol=ab-eip&gateway=");
-//        str.append(hostIP);
-//        str.append("&path=");
-//        str.append(template.getHostCpuSlot());
-//        str.append("&plc=ControlLogix&elem_count=");
-//        str.append(tagNames.size());
-//        str.append("&name=");
-//        str.append(table.getTagAddr());
-//        tagAddr = str.toString();
-//        tagType = table.getTagType();
-//
-//        return new CIPTagGroup(serverName, table.getName(), tagAddr, tagType, tagNames);
-//    }
 
     /**
      * 启动 OPC UA 连接和订阅
      */
-    public void start() throws Exception {
+    public void start()  {
 
-        // 获取服务端点描述
-        List<EndpointDescription> endpoints = DiscoveryClient.getEndpoints(serverUrl).get();
-
-        // 选择无安全策略的端点
-        EndpointDescription endpoint = endpoints.stream()
-                .filter(e -> e.getSecurityPolicyUri().equals(SecurityPolicy.None.getUri()))
-                .findFirst()
-                .orElseThrow(() -> new Exception("No endpoint with SecurityPolicy.None found"));
-
-        // 创建客户端配置
-        OpcUaClientConfig config = OpcUaClientConfig.builder()
-                .setEndpoint(endpoint)
-                .build();
-
-        // 创建客户端
-        OpcUaClient client = OpcUaClient.create(config);
-
-        try {
-            // 连接到 OPC UA 服务器
-            client.connect();
-            DBUtil.writeLogToDB(serverName , "Connected to OPC UA Server: " + serverUrl);
-
-            // 创建订阅
-            OpcUaSubscription subscription = new OpcUaSubscription(client);
-            subscription.setPublishingInterval(Double.valueOf(sampleInterval));
-
-
-            // Set a listener for data changes at the subscription level.
-            subscription.setSubscriptionListener(
-                    new OpcUaSubscription.SubscriptionListener() {
-                        @Override
-                        public void onDataReceived(
-                                OpcUaSubscription subscription,
-                                List<OpcUaMonitoredItem> items,
-                                List<DataValue> values) {
-
-                            for (int i = 0; i < items.size(); i++) {
-                                logger.info(
-                                        "subscription onDataReceived: nodeId={}, value={}",
-                                        items.get(i).getReadValueId().getNodeId(),
-                                        values.get(i).value());
-                            }
-                        }
-                    });
-
-            // Create the subscription on the server.
-            subscription.create();
-
-            // 为每个节点创建监控项并添加到订阅
-            for (NodeId nodeId : NODE_IDS) {
-                OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(nodeId);
-                monitoredItem.setSamplingInterval(SAMPLING_INTERVAL);
-
-                // 添加监控项到订阅
-                subscription.addMonitoredItem(monitoredItem);
-            }
-
-            // Synchronize the MonitoredItems with the server.
-            // This will create, modify, and delete items as necessary.
-            try {
-                subscription.synchronizeMonitoredItems();
-            } catch (MonitoredItemSynchronizationException e) {
-                e.getCreateResults()
-                        .forEach(
-                                result ->
-                                        logger.warn(
-                                                "failed to create item: nodeId={}, serviceResult={}, operationResult={}",
-                                                result.monitoredItem().getReadValueId().getNodeId(),
-                                                result.serviceResult(),
-                                                result.operationResult()));
-            }
-
-
-            // 保持运行状态，持续接收数据
-            logger.info("Subscription is active. Waiting for data changes...");
-            logger.info("Press Ctrl+C to stop.");
-
-            // 添加关闭钩子
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                logger.info("Shutting down...");
-                try {
-                    subscription.delete();
-                    client.disconnect();
-                    logger.info("Disconnected from server");
-                } catch (Exception e) {
-                    logger.error("Error during shutdown", e);
-                }
-            }));
-
-            // 让程序持续运行
-            Thread.sleep(Long.MAX_VALUE);
-
-        } catch (Exception e) {
-            logger.error("Error in subscription", e);
-            throw e;
-        } finally {
-            // 清理资源
-            try {
-                client.disconnect();
-            } catch (Exception e) {
-                logger.error("Error disconnecting", e);
-            }
+        // 检查是否已经在运行
+        if (isRunning) {
+            DBUtil.logWarning(serverName, "Server {} is already running, skipping start", serverName);
+            return;
         }
 
-        minute = LocalDateTime.now().getMinute();
-        second = LocalDateTime.now().getSecond();
+        try {
+            // 获取服务端点描述
+            List<EndpointDescription> endpoints = DiscoveryClient.getEndpoints(serverUrl).get();
+            EndpointDescription endpoint = endpoints.stream()
+                    .filter(e -> e.getSecurityPolicyUri().equals(SecurityPolicy.None.getUri()))
+                    .findFirst()
+                    .orElse(null);
 
-        for (CIPTagGroup cipTagGroup : customModuleNodeGroupList) {
-
-            //log reading time, if time is too long
-            //or every 20 minutes, as heart beat for each instance
-            startTime = System.currentTimeMillis();
-            isTagGroupChanged = cipTagGroup.isTagGroupChanged();
-            stopTime = System.currentTimeMillis();
-            costTime = stopTime - startTime;
-            if ((costTime > 50) || (minute % 20 == 0 && second == 0)) {
-                DBUtil.writeLogToDB(serverName, serverName + " " + " read tags taking time: " + (stopTime - startTime) + "ms");
+            if (endpoint == null) {
+                DBUtil.logError(serverName, "No endpoint with SecurityPolicy.None found for server: {}", serverUrl);
+                return;
             }
 
-            if (isTagGroupChanged) {
-                // 将数据写入全局队列，由消费者线程池统一处理， 使用InfluxDB3数据库
-                globalDataQueue.enqueueCustomData(serverName, cipTagGroup);
+            // 创建客户端
+            OpcUaClientConfig config = OpcUaClientConfig.builder().setEndpoint(endpoint).build();
+            client = OpcUaClient.create(config);
+
+            // 连接
+            client.connect();
+            DBUtil.logInfo(serverName, "Connected to OPC UA Server: {}", serverUrl);
+
+            // 创建订阅
+            if (customModuleIsEnabled) {
+                for (OpcUaNodeGroup nodeGroup : customModuleNodeGroupList) {
+                    createSubscriptionForNodeGroup(client, nodeGroup);
+                }
             }
 
+            isRunning = true;
+            DBUtil.logInfo(serverName, "Server {} started successfully", serverName);
+
+        } catch (Exception e) {
+            isRunning = false;
+            // 启动失败，记录日志并抛出异常
+            DBUtil.logInfo(serverName, "Failed to start server: {}", e.getMessage());
+           e.printStackTrace();
         }
     }
 
     /**
-     * 销毁所有的 tag group
+     * 统一的资源清理方法
+     * 包括：删除所有 subscription、断开 OPC UA 连接、清空本地缓存
+     * 由 ServerTaskManager.stopMonitoring() 或 AppLifecycleListener.contextDestroyed() 调用
      */
-    public void destroyAllTags() {
-        System.out.println(serverName + ": Destroying all tag groups for server");
-        DBUtil.writeLogToDB(serverName, "Destroying all tag groups for server: ");
+    public void shutdown() {
+        // 如果未运行，无需关闭
+        if (!isRunning) {
+            DBUtil.logWarning(serverName, "Server {} is not running, skipping shutdown", serverName);
+            return;
+        }
 
-        for (CIPTagGroup tagGroup : customModuleNodeGroupList) {
+        DBUtil.logInfo(serverName, "Starting shutdown process for server: {}", serverName);
+        isRunning = false;
+
+        // 1. 删除所有 subscription
+        if (!subscriptionMap.isEmpty()) {
+            DBUtil.logInfo(serverName, "Deleting {} subscriptions...", subscriptionMap.size());
+            for (Map.Entry<String, OpcUaSubscription> entry : subscriptionMap.entrySet()) {
+                try {
+                    entry.getValue().delete();
+                    DBUtil.logInfo(serverName, "Deleted subscription for nodeGroup: {}", entry.getKey());
+                } catch (Exception e) {
+                    DBUtil.logError(serverName, "Deleting subscription for {}: {}", entry.getKey(), e.getMessage());
+                }
+            }
+            subscriptionMap.clear();
+            DBUtil.logInfo(serverName, "All subscriptions deleted and map cleared");
+        }
+
+        // 2. 断开 OPC UA 客户端连接
+        if (client != null) {
             try {
-                tagGroup.destoryTagGroup();
+                client.disconnect();
+                DBUtil.logInfo(serverName, "OPC UA client disconnected successfully");
             } catch (Exception e) {
-                System.err.println("Error destroying tag group: " + e.getMessage());
-                DBUtil.writeLogToDB(serverName, "Error destroying tag group: " + e.getMessage());
+                DBUtil.logError(serverName, "Disconnecting OPC UA client: {}", e.getMessage());
             }
         }
-        customModuleNodeGroupList.clear();
-        System.out.println(serverName + ": All tag groups destroyed for server");
-        DBUtil.writeLogToDB(serverName, "All tag groups destroyed for server");
+
+        // 3. 清空 nodeGroup 列表
+        if (!customModuleNodeGroupList.isEmpty()) {
+            int size = customModuleNodeGroupList.size();
+            customModuleNodeGroupList.clear();
+            DBUtil.logInfo(serverName, "Cleared {} node groups from local cache", size);
+        }
+
+        DBUtil.logInfo(serverName, "Shutdown process completed for server: {}", serverName);
+    }
+
+    /**
+     * 为单个 nodeGroup 创建独立的 subscription
+     *
+     * @param client    OPC UA 客户端
+     * @param nodeGroup 节点组
+     */
+    private void createSubscriptionForNodeGroup(OpcUaClient client, OpcUaNodeGroup nodeGroup) throws Exception {
+        String groupName = nodeGroup.getName();
+        Integer sampleInterval = nodeGroup.getSampleInterval();
+        DBUtil.logInfo(serverName, "Creating subscription for nodeGroup: {}" + groupName);
+
+        // 创建订阅
+        OpcUaSubscription subscription = new OpcUaSubscription(client);
+        subscription.setPublishingInterval(Double.valueOf(sampleInterval));
+
+        // 设置订阅级别的数据变化监听器
+        subscription.setSubscriptionListener(new OpcUaSubscription.SubscriptionListener() {
+            @Override
+            public void onDataReceived(OpcUaSubscription subscription, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+                // 处理该 nodeGroup 的数据
+                handleDataChange(nodeGroup, items, values);
+            }
+        });
+
+        // 在服务器上创建订阅
+        subscription.create();
+
+        // 根据节点类型添加监控项
+        if (nodeGroup.getNodeType() == NodeGroupType.ARRAY) {
+            // 只添加数组的第一个元素到订阅
+            OpcUaNode node = nodeGroup.getNodeList().get(0);
+            OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
+            monitoredItem.setSamplingInterval(sampleInterval);
+            DBUtil.logInfo(serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
+
+        } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
+            // 为 SCALAR 类型的每个节点创建监控项
+            for (OpcUaNode node : nodeGroup.getNodeList()) {
+                OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
+                monitoredItem.setSamplingInterval(sampleInterval);
+
+                // 添加监控项到该 nodeGroup 的订阅
+                subscription.addMonitoredItem(monitoredItem);
+                DBUtil.logInfo(serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
+            }
+        }
+
+        // 同步监控项到服务器
+        try {
+            subscription.synchronizeMonitoredItems();
+            DBUtil.logInfo(serverName, "Successfully synchronized monitored items for nodeGroup: {}", groupName);
+        } catch (MonitoredItemSynchronizationException e) {
+            DBUtil.logError(serverName, "Failed to synchronize monitored items for nodeGroup: {}", groupName, e);
+            e.getCreateResults().forEach(result ->
+                    DBUtil.logError(serverName, "Failed to create item: nodeId={}, serviceResult={}, operationResult={}",
+                            result.monitoredItem().getReadValueId().getNodeId(),
+                            result.serviceResult(),
+                            result.operationResult())
+            );
+        }
+
+        // 将 subscription 保存到 map 中，方便后续管理
+        subscriptionMap.put(groupName, subscription);
+        DBUtil.logInfo(serverName, "Subscription created successfully for nodeGroup: {}", groupName);
+    }
+
+    /**
+     * 处理 OPC UA 节点数据变化
+     * 策略：
+     * - SCALAR 类型：每个节点独立订阅，分别更新
+     * - ARRAY 类型：只订阅第一个节点，收到数组后拆分赋值给所有节点
+     *
+     * @param nodeGroup 节点组
+     * @param items     监控项列表
+     * @param values    数据值列表
+     */
+    private void handleDataChange(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+        try {
+            // 参数验证
+            if (items == null || values == null || items.isEmpty() || values.isEmpty()) {
+                DBUtil.logWarning(serverName, "Received empty data for nodeGroup: {}", nodeGroup.getName());
+                return;
+            }
+
+            if (items.size() != values.size()) {
+                DBUtil.logWarning(serverName, "Items and values size mismatch for nodeGroup: {}", nodeGroup.getName());
+                return;
+            }
+
+            String groupName = nodeGroup.getName();
+            boolean hasChanges = false;
+
+            // 根据节点组类型采用不同的处理策略
+            if (nodeGroup.getNodeType() == NodeGroupType.ARRAY) {
+                // ARRAY 类型：处理数组数据，拆分后赋值给各个节点
+                hasChanges = handleArrayData(nodeGroup, items, values);
+            } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
+                // SCALAR 类型：每个节点独立更新
+                hasChanges = handleScalarData(nodeGroup, items, values);
+            }
+
+            // 如果有节点发生变化，将数据入队
+            if (hasChanges) {
+                // 检查是否有节点值为 null
+                for (OpcUaNode node : nodeGroup.getNodeList()) {
+                    if (node.getNewValue() == null) {
+                        DBUtil.logWarning(serverName, "Node {} in group {} has no value yet",
+                                node.getName(), groupName);
+                    }
+                }
+
+                // 将数据入队
+                boolean success = globalDataQueue.enqueueCustomData(serverName, nodeGroup);
+
+                if (success) {
+                    DBUtil.logInfo(serverName, "Data enqueued successfully for nodeGroup: {}, nodes count: {}",
+                            groupName, nodeGroup.getNodeList().size());
+                } else {
+                    DBUtil.logWarning(serverName, "Failed to enqueue data for nodeGroup: {} - queue may be full", groupName);
+                }
+            }
+
+        } catch (Exception e) {
+            DBUtil.logError(serverName, "Error handling data change for nodeGroup {}: {}",
+                    nodeGroup.getName(), e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 处理 SCALAR 类型的节点数据
+     * 每个节点独立订阅，分别更新
+     *
+     * @param nodeGroup 节点组
+     * @param items     监控项列表
+     * @param values    数据值列表
+     * @return 是否有节点发生变化
+     */
+    private boolean handleScalarData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+        boolean hasChanges = false;
+
+        for (int i = 0; i < items.size(); i++) {
+            OpcUaMonitoredItem item = items.get(i);
+            DataValue dataValue = values.get(i);
+
+            // 获取节点 ID
+            NodeId nodeId = item.getReadValueId().getNodeId();
+
+            // 在 nodeGroup 中找到对应的 OpcUaNode
+            OpcUaNode matchingNode = findNodeByNodeId(nodeGroup, nodeId);
+
+            if (matchingNode != null && dataValue.getValue() != null) {
+                Object value = dataValue.getValue().getValue();
+
+                if (value != null) {
+                    // 更新节点值（会自动保存 oldValue）
+                    matchingNode.updateValue(value);
+                    hasChanges = true;
+
+                    DBUtil.logDebugL1(serverName, "Node {} updated: {} -> {}",
+                            matchingNode.getName(), matchingNode.getOldValue(), matchingNode.getNewValue());
+
+                }
+            }
+        }
+
+        return hasChanges;
+    }
+
+    /**
+     * 处理 ARRAY 类型的节点数据
+     * 只订阅了第一个节点，但收到的是整个数组，需要拆分后赋值给各个节点
+     *
+     * @param nodeGroup 节点组
+     * @param items     监控项列表（只有一个元素）
+     * @param values    数据值列表（只有一个元素，包含数组）
+     * @return 是否有节点发生变化
+     */
+    private boolean handleArrayData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+        // ARRAY 类型应该只有一个监控项（订阅的第一个节点）
+        if (items.size() != 1 || values.size() != 1) {
+            DBUtil.logWarning(serverName, "ARRAY nodeGroup should have only 1 monitored item, but got {}", items.size());
+            return false;
+        }
+
+        DataValue dataValue = values.get(0);
+        if (dataValue.getValue() == null) {
+            DBUtil.logWarning(serverName, "Received null value for ARRAY nodeGroup: {}", nodeGroup.getName());
+            return false;
+        }
+
+        Object arrayValue = dataValue.getValue().getValue();
+
+        // 检查是否为数组类型
+        if (arrayValue == null || !arrayValue.getClass().isArray()) {
+            DBUtil.logWarning(serverName, "Expected array value for ARRAY nodeGroup {}, but got: {}",
+                    nodeGroup.getName(), arrayValue != null ? arrayValue.getClass().getName() : "null");
+            return false;
+        }
+
+        int arrayLength = Array.getLength(arrayValue);
+        List<OpcUaNode> nodeList = nodeGroup.getNodeList();
+
+        // 检查数组长度是否与节点数量匹配
+        if (arrayLength != nodeList.size()) {
+            DBUtil.logWarning(serverName, "Array length ({}) does not match node count ({}) for nodeGroup: {}",
+                    arrayLength, nodeList.size(), nodeGroup.getName());
+        }
+
+        boolean hasChanges = false;
+
+        // 将数组拆分，分别赋值给每个节点
+        for (int i = 0; i < nodeList.size(); i++) {
+            OpcUaNode node = nodeList.get(i);
+
+            // 从数组中获取对应索引的值
+            Object elementValue = null;
+            if (i < arrayLength) {
+                elementValue = Array.get(arrayValue, i);
+            }
+
+            if (elementValue != null) {
+                // 更新节点值
+                node.updateValue(elementValue);
+                hasChanges = true;
+
+                DBUtil.logDebugL1(serverName, "Node [{}] updated from array[{}]: {} -> {}",
+                        node.getName(), i, node.getOldValue(), node.getNewValue());
+
+            }
+        }
+
+        DBUtil.logDebugL1(serverName, "ARRAY nodeGroup {} processed: {} elements from array of length {}",
+                nodeGroup.getName(), nodeList.size(), arrayLength);
+
+        return hasChanges;
+    }
+
+    /**
+     * 根据 NodeId 在 nodeGroup 中查找对应的 OpcUaNode
+     *
+     * @param nodeGroup 节点组
+     * @param nodeId    OPC UA NodeId
+     * @return 匹配的 OpcUaNode，未找到返回 null
+     */
+    private OpcUaNode findNodeByNodeId(OpcUaNodeGroup nodeGroup, NodeId nodeId) {
+        return nodeGroup.getNodeByNodeId(nodeId);
     }
 
 }

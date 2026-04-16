@@ -16,20 +16,33 @@ import com.lego.service.Impl.TemplateServiceImpl;
 public class TemplateUtil {
     /**
      * 解析模板
-     * @param server
-     * @return
+     * 如果模板不存在，记录日志并返回 null，不会中断应用
+     * 
+     * @param server 服务器配置
+     * @return 模板对象，未找到则返回 null
      */
     public static Template resolveTemplate(Server server) {
         String templateName = server.getTemplateName();
-        if (templateName == null) {
+        
+        // 检查模板名称是否为空
+        if (templateName == null || templateName.isEmpty()) {
+            DBUtil.logWarning("app", "Server {} has no template configured", server.getName());
             return null;
         }
 
-        return TemplateServiceImpl.getInstance()
+        // 查找模板
+        Template template = TemplateServiceImpl.getInstance()
                 .getAllTemplates()
                 .stream()
                 .filter(t -> templateName.equals(t.getName()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Template not found: " + templateName));
+                .orElse(null);
+
+        // 如果未找到，记录日志
+        if (template == null) {
+            DBUtil.logWarning("app", "Template not found: {} for server: {}", templateName, server.getName());
+        }
+
+        return template;
     }
 }

@@ -9,7 +9,7 @@ package com.lego.pojo.template.custom;
  * @Create 4/15/2026 2:37 PM
  * @Version 1.0
  */
-public enum NodeType {
+public enum NodeGroupType {
     SCALAR,
     ARRAY
 }

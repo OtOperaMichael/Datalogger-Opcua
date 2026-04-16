@@ -24,7 +24,6 @@ public class Template {
 
     private String id;
     private String name;
-    private Integer sampleInterval;
     private String port;
     private String postfix;
     private CustomModule custom;

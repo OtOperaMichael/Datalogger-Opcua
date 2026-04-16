@@ -1,7 +1,6 @@
 package com.lego.util;
 
 import com.lego.pojo.SystemConfig;
-import lombok.Getter;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -34,6 +33,9 @@ public class SystemConfigUtil {
     // 前端模版table最大字段数量
     private Integer maxTableFieldCount;
 
+    // 数据库保留天数
+    private Integer databaseRetentionDays;
+
     // 数据采集线程数量
     private Integer dataCollectionThreads;
 
@@ -65,6 +67,7 @@ public class SystemConfigUtil {
         return instance;
     }
 
+
     /**
      * 检查系统配置是否就绪
      *
@@ -90,7 +93,7 @@ public class SystemConfigUtil {
         if (configFile.exists()) {
             if (configFile.delete()) {
                 System.out.println("System config file deleted successfully");
-                DBUtil.writeLogToDB("app", "System config file deleted");
+                DBUtil.logInfo("app", "System config file deleted");
 
                 // 重置实例和配置
                 synchronized (SystemConfigUtil.class) {
@@ -101,10 +104,20 @@ public class SystemConfigUtil {
                 return true;
             } else {
                 System.err.println("Failed to delete system config file");
-                DBUtil.writeLogToDB("app", "Err:: Failed to delete system config file");
+                DBUtil.logError("app", "Failed to delete system config file");
             }
         }
         return true;
+    }
+
+    /**
+     * 获取数据库保留天数的方法
+     * 该方法用于从配置或数据库中获取数据保留的天数设置
+     *
+     * @return Integer 返回数据库保留的天数，如果获取失败则返回null
+     */
+    public static Integer getDatabaseRetentionDays() {
+        return getInstance().databaseRetentionDays;
     }
 
     /**
@@ -170,6 +183,7 @@ public class SystemConfigUtil {
         this.maxTableCount = config.getMaxTableCount();
         this.maxTableFieldCount = config.getMaxTableFieldCount();
         // 后端配置默认，可以在配置文件中修改
+        this.databaseRetentionDays = 15;
         this.dataCollectionThreads = 20;
         this.dataSaveThreads = 1;
         this.dataSaveInterval = 20;
@@ -189,6 +203,9 @@ public class SystemConfigUtil {
         }
         if (this.maxTableFieldCount != null) {
             props.setProperty("max.table.field.count", this.maxTableFieldCount.toString());
+        }
+        if (this.databaseRetentionDays != null) {
+            props.setProperty("database.retenion.days", this.databaseRetentionDays.toString());
         }
         if (this.dataCollectionThreads != null) {
             props.setProperty("data.collection.threads", this.dataCollectionThreads.toString());
@@ -216,17 +233,18 @@ public class SystemConfigUtil {
                     ", maxServerCount=" + this.maxServerCount +
                     ", maxTableCount=" + this.maxTableCount +
                     ", maxTableFieldCount=" + this.maxTableFieldCount +
+                    ", databaseRetenionDays=" + this.databaseRetentionDays + "days" +
                     ", collectionThreads=" + this.dataCollectionThreads +
                     ", saveThreads=" + this.dataSaveThreads +
                     ", interval=" + this.dataSaveInterval + "s" +
                     ", batchSize=" + this.dataSaveBatchSize +
                     ", logLevel=" + this.logLevel);
-            DBUtil.writeLogToDB("app", "System config saved to file");
+            DBUtil.logInfo("app", "System config saved to file");
 
             return true;
         } catch (IOException e) {
             e.printStackTrace();
-            DBUtil.writeLogToDB("app", "Err:: Failed to save system config: " + e.getMessage());
+            DBUtil.logError("app", "Failed to save system config: " + e.getMessage());
             return false;
         }
     }
@@ -252,6 +270,9 @@ public class SystemConfigUtil {
                 this.maxTableFieldCount = Integer.parseInt(
                         props.getProperty("max.table.field.count", "20")
                 );
+                this.databaseRetentionDays = Integer.parseInt(
+                        props.getProperty("database.retenion.days", "15")
+                );
                 this.dataCollectionThreads = Integer.parseInt(
                         props.getProperty("data.collection.threads", "20")
                 );
@@ -262,26 +283,27 @@ public class SystemConfigUtil {
                         props.getProperty("data.save.interval", "20")
                 );
                 this.dataSaveBatchSize = Integer.parseInt(
-                        props.getProperty("data.save.batch.size", "2000")
+                        props.getProperty("data.save.batch.size", "5000")
                 );
                 this.logLevel = Integer.parseInt(
                         props.getProperty("log.level", "0")
                 );
 
                 String configLog = String.format(
-                    "System config loaded: adminPassword=%s, maxServerCount=%d, maxTableCount=%d, maxTableFieldCount=%d, dataCollectionThreads=%d, dataSaveThreads=%d, dataSaveInterval=%ds, batchSize=%d, logLevel=%d",
-                    maskPassword(this.adminPassword),
-                    this.maxServerCount,
-                    this.maxTableCount,
-                    this.maxTableFieldCount,
-                    this.dataCollectionThreads,
-                    this.dataSaveThreads,
-                    this.dataSaveInterval,
-                    this.dataSaveBatchSize,
-                    this.logLevel
+                        "System config loaded: adminPassword=%s, maxServerCount=%d, maxTableCount=%d, maxTableFieldCount=%d, databaseRetentionDays=%d, dataCollectionThreads=%d, dataSaveThreads=%d, dataSaveInterval=%ds, batchSize=%d, logLevel=%d",
+                        maskPassword(this.adminPassword),
+                        this.maxServerCount,
+                        this.maxTableCount,
+                        this.maxTableFieldCount,
+                        this.databaseRetentionDays,
+                        this.dataCollectionThreads,
+                        this.dataSaveThreads,
+                        this.dataSaveInterval,
+                        this.dataSaveBatchSize,
+                        this.logLevel
                 );
                 System.out.println(configLog);
-                DBUtil.writeLogToDB("app", configLog);
+                DBUtil.logInfo("app", configLog);
 
             } catch (IOException e) {
                 e.printStackTrace();
@@ -299,10 +321,11 @@ public class SystemConfigUtil {
         this.maxServerCount = 10;
         this.maxTableCount = 20;
         this.maxTableFieldCount = 20;
+        this.databaseRetentionDays = 15;
         this.dataCollectionThreads = 20;
         this.dataSaveThreads = 1;
         this.dataSaveInterval = 20;
-        this.dataSaveBatchSize = 2000;
+        this.dataSaveBatchSize = 5000;
         this.logLevel = 0;
     }
 
@@ -317,6 +340,7 @@ public class SystemConfigUtil {
                 this.maxServerCount,
                 this.maxTableCount,
                 this.maxTableFieldCount,
+                this.databaseRetentionDays,
                 this.dataCollectionThreads,
                 this.dataSaveThreads,
                 this.dataSaveInterval,

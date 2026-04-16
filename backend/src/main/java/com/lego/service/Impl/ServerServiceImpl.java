@@ -53,7 +53,7 @@ public class ServerServiceImpl implements ServerService {
         File file = new File(JSON_FILE_PATH);
         if (!file.exists()) {
             System.out.println("serverList.json not found, starting with empty list.");
-            DBUtil.writeLogToDB("app", "serverList.json not found, starting with empty list.");
+            DBUtil.logWarning("app", "serverList.json not found, starting with empty list.");
 
             return;
         }
@@ -64,11 +64,11 @@ public class ServerServiceImpl implements ServerService {
             serverList.clear();
             serverList.addAll(loaded);
             System.out.println("Loaded " + serverList.size() + " servers from " + JSON_FILE_PATH);
-            DBUtil.writeLogToDB("app", "Loaded " + serverList.size() + " servers from " + JSON_FILE_PATH);
+            DBUtil.logInfo("app", "Loaded " + serverList.size() + " servers from " + JSON_FILE_PATH);
 
         } catch (IOException e) {
             System.err.println("Failed to load serverList.json: " + e.getMessage());
-            DBUtil.writeLogToDB("app", "Failed to load serverList.json: " + e.getMessage());
+            DBUtil.logError("app", "Failed to load serverList.json: " + e.getMessage());
         }
     }
 
@@ -100,7 +100,7 @@ public class ServerServiceImpl implements ServerService {
                 if (s.getId().equalsIgnoreCase(newServer.getId())) {
                     serverList.set(i, newServer);
                     System.out.println("Updated server: " + newServer.getName());
-                    DBUtil.writeLogToDB("app", "Updated server: " + newServer.getName());
+                    DBUtil.logInfo("app", "Updated server: " + newServer.getName());
                     found = true;
                     break;
                 }
@@ -111,16 +111,16 @@ public class ServerServiceImpl implements ServerService {
                 newServer.setAutoStart(true);
                 serverList.add(newServer);
                 System.out.println("Added new server: " + newServer.getName());
-                DBUtil.writeLogToDB("app", "Added new server: " + newServer.getName());
+                DBUtil.logInfo("app", "Added new server: " + newServer.getName());
             }
             saveToFile();
             System.out.println("Saved serverList.json");
-            DBUtil.writeLogToDB("app", "Saved serverList.json");
+            DBUtil.logInfo("app", "Saved serverList.json");
             return new ArrayList<>(serverList);
         } catch (IOException e) {
             e.printStackTrace();
             System.out.println("Failed to save server"+ newServer.getName());
-            DBUtil.writeLogToDB("app", "Failed to save server"+ newServer.getName());
+            DBUtil.logError("app", "Failed to save server"+ newServer.getName());
             return new ArrayList<>(serverList);
         } finally {
             lock.writeLock().unlock();
@@ -146,12 +146,12 @@ public class ServerServiceImpl implements ServerService {
             // 3. 从列表移除
             serverList.removeIf(s -> s.getId().equalsIgnoreCase(id));
             System.out.println("Deleted server: " + server.getName());
-            DBUtil.writeLogToDB("app", "Deleted server: " + server.getName());
+            DBUtil.logInfo("app", "Deleted server: " + server.getName());
 
             // 4. 持久化（此时 status 已无关）
             saveToFile();
             System.out.println("Saved serverList.json");
-            DBUtil.writeLogToDB("app", "Saved serverList.json");
+            DBUtil.logInfo("app", "Saved serverList.json");
 
             // 5. 删除数据库 如果是mysql, 因为以后重名可以能写入冲突
             DBUtil.deleteSchema(server.getName());
@@ -160,12 +160,12 @@ public class ServerServiceImpl implements ServerService {
         } catch (IOException e) {
             e.printStackTrace();
             System.out.println("Failed to delete server"+ id);
-            DBUtil.writeLogToDB("app", "Failed to delete server"+ id);
+            DBUtil.logError("app", "Failed to delete server"+ id);
             return new ArrayList<>(serverList);
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Failed to delete server"+ id);
-            DBUtil.writeLogToDB("app", "Failed to delete server"+ id);
+            DBUtil.logError("app", "Failed to delete server"+ id);
             return new ArrayList<>(serverList);
         } finally {
             lock.writeLock().unlock();
