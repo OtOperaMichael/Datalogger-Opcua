@@ -4,7 +4,8 @@ import {
   type CustomNodeInterface,
   type CustomTableInterface,
   type CustomModuleInterface,
-  type TemplateInterface,
+  type TemplateInterface, type CommModuleInterface, type CommTableInterface,
+  type AlarmTableInterface, type AlarmModuleInterface,
 } from "@/types/template.ts";
 
 
@@ -29,12 +30,12 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
     } as CustomModuleInterface,
     alarm: {
       enable: false,
-      tableList: [] as CustomTableInterface[]
-    } as CustomModuleInterface,
+      tableList: [] as AlarmTableInterface[]
+    } as AlarmModuleInterface,
     communication: {
       enable: false,
-      tableList: [] as CustomTableInterface[]
-    } as CustomModuleInterface,
+      tableList: [] as CommTableInterface[]
+    } as CommModuleInterface,
     createNew: false
   }),
 
