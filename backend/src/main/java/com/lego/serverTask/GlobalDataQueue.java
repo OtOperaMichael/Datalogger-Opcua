@@ -162,8 +162,8 @@ public class GlobalDataQueue {
                         // 每10秒打印线程状态
                         // 每隔 6 次打印一次线程状态
                         String threadStatus = ThreadDiagnosticUtil.getThreadStatus(true).toString();
-                        LogUtil.logDebugL1("app", "{}", threadStatus);
-                        DBUtil.logDebugL1("app", "{}", threadStatus);
+                        LogUtil.logDebugL2("app", "{}", threadStatus);
+                        DBUtil.logDebugL2("app", "{}", threadStatus);
                     }
 
                 } else {

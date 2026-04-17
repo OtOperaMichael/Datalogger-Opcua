@@ -20,6 +20,7 @@ import java.util.Properties;
 public class SystemConfigUtil {
 
     private static volatile SystemConfigUtil instance;
+    private static volatile boolean configLogged = false;
 
     // 前端管理员密码
     private String adminPassword;
@@ -289,21 +290,25 @@ public class SystemConfigUtil {
                         props.getProperty("log.level", "0")
                 );
 
-                String configLog = String.format(
-                        "System config loaded: adminPassword=%s, maxServerCount=%d, maxTableCount=%d, maxTableFieldCount=%d, databaseRetentionDays=%d, dataCollectionThreads=%d, dataSaveThreads=%d, dataSaveInterval=%ds, batchSize=%d, logLevel=%d",
-                        maskPassword(this.adminPassword),
-                        this.maxServerCount,
-                        this.maxTableCount,
-                        this.maxTableFieldCount,
-                        this.databaseRetentionDays,
-                        this.dataCollectionThreads,
-                        this.dataSaveThreads,
-                        this.dataSaveInterval,
-                        this.dataSaveBatchSize,
-                        this.logLevel
-                );
-                LogUtil.logInfo("app",configLog);
-                DBUtil.logInfo("app", configLog);
+                // 只在第一次加载时输出日志
+                if (!configLogged) {
+                    String configLog = String.format(
+                            "System config loaded: adminPassword=%s, maxServerCount=%d, maxTableCount=%d, maxTableFieldCount=%d, databaseRetentionDays=%d, dataCollectionThreads=%d, dataSaveThreads=%d, dataSaveInterval=%ds, batchSize=%d, logLevel=%d",
+                            maskPassword(this.adminPassword),
+                            this.maxServerCount,
+                            this.maxTableCount,
+                            this.maxTableFieldCount,
+                            this.databaseRetentionDays,
+                            this.dataCollectionThreads,
+                            this.dataSaveThreads,
+                            this.dataSaveInterval,
+                            this.dataSaveBatchSize,
+                            this.logLevel
+                    );
+                    LogUtil.logInfo("app",configLog);
+                    DBUtil.logInfo("app", configLog);
+                    configLogged = true;
+                }
 
             } catch (IOException e) {
                 e.printStackTrace();
