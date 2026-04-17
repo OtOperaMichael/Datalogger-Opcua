@@ -481,6 +481,7 @@ public class DBUtil {
         }
     }
 
+
     /**
      * 写入日志数据到 TimescaleDB（支持 SLF4J 风格的占位符）
      * 使用示例：
@@ -509,7 +510,7 @@ public class DBUtil {
      */
     public static void logWarning(String schemaName, String format, Object... args) {
         // 格式化日志消息
-        String formattedLog = "Warning: " + formatLogMessage(format, args);
+        String formattedLog = "[Warning]: " + formatLogMessage(format, args);
 
         // 调用原有的 logInfo 方法
         logInfo(schemaName, formattedLog);
@@ -525,7 +526,7 @@ public class DBUtil {
      */
     public static void logError(String schemaName, String format, Object... args) {
         // 格式化日志消息
-        String formattedLog = "Error: " + formatLogMessage(format, args);
+        String formattedLog = "[Error]: " + formatLogMessage(format, args);
 
         // 调用原有的 logInfo 方法
         logInfo(schemaName, formattedLog);
@@ -543,7 +544,7 @@ public class DBUtil {
     public static void logDebugL1(String schemaName, String format, Object... args) {
         if (LOG_LEVEL >= 1) {
             // 格式化日志消息
-            String formattedLog = "Debug: " + formatLogMessage(format, args);
+            String formattedLog = "[Debug]: " + formatLogMessage(format, args);
 
             // 调用原有的 logInfo 方法
             logInfo(schemaName, formattedLog);
@@ -562,7 +563,7 @@ public class DBUtil {
     public static void logDebugL2(String schemaName, String format, Object... args) {
         if (LOG_LEVEL >= 2) {
             // 格式化日志消息
-            String formattedLog = "Debug: " + formatLogMessage(format, args);
+            String formattedLog = "[Debug]: " + formatLogMessage(format, args);
 
             // 调用原有的 logInfo 方法
             logInfo(schemaName, formattedLog);
