@@ -1,5 +1,5 @@
 import {defineStore} from 'pinia'
-import {NodeType, DataType, type TemplateInterface} from "@/types/template.ts";
+import {NodeGroupType, DataType, type TemplateInterface} from "@/types/template.ts";
 import request from "@/utils/request.ts";
 import {message} from "ant-design-vue";
 
@@ -16,7 +16,7 @@ export const useTemplateListStore = defineStore("templateListStore", {
           enable: true,
           tableList: Array.from({length: 1}, () => ({
             name: "undefined-table",
-            nodeType: NodeType.SCALAR,
+            nodeGroupType: NodeGroupType.SCALAR,
             nodeList: Array.from({length: 10}, () => ({
               name: "undefined-node",
               nodeId: "ns=2;s=undefined",
@@ -43,7 +43,7 @@ export const useTemplateListStore = defineStore("templateListStore", {
           enable: true,
           tableList: Array.from({length: 1}, () => ({
             name: "fake-table",
-            nodeType: NodeType.SCALAR,
+            nodeGroupType: NodeGroupType.SCALAR,
             nodeList: Array.from({length: 10}, () => ({
               name: "fake-node",
               nodeId: "ns=2;s=fake",

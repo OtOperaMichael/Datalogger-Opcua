@@ -19,6 +19,7 @@ import lombok.NoArgsConstructor;
 @Data
 public class QueryLoad {
     private String serverName;
+    private String moduleName;
     private String tableName;
     private String startTime;
     private String endTime;

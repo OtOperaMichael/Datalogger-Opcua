@@ -91,7 +91,7 @@ public class DBUtil {
                 createSchemaIfNotExists("app");
 
                 logInfo("app", "TimescaleDB connection pool initialized");
-                System.out.println("TimescaleDB connection pool initialized");
+                LogUtil.logInfo("app", "TimescaleDB connection pool initialized");
 
                 return configLoaded;
             }
@@ -105,6 +105,8 @@ public class DBUtil {
                 }
                 dataSource = null;
             }
+            
+            LogUtil.logError("app", "Failed to initialize TimescaleDB connection pool: {}", e.getMessage());
         }
         return false;
     }
@@ -131,8 +133,8 @@ public class DBUtil {
             String sql = "CREATE SCHEMA IF NOT EXISTS " + schemaName;
             stmt.execute(sql);
             createLogTable(schemaName);
-            System.out.println("Schema created: " + schemaName);
-            logInfo(schemaName, "schema created for server: " + schemaName);
+            LogUtil.logInfo(schemaName, "Schema created: {}", schemaName);
+            logInfo(schemaName, "Schema created for server: {}", schemaName);
 
         }
     }
@@ -144,7 +146,8 @@ public class DBUtil {
 
         // 先检查数据库是否存在
         if (!schemaExists(schemaName)) {
-            logWarning("app", "TimescaleDB database does not exist, skip deletion: " + schemaName);
+            logWarning("app", "TimescaleDB database does not exist, skip deletion: {}", schemaName);
+            LogUtil.logWarning("app", "TimescaleDB database does not exist, skip deletion: {}", schemaName);
             return;
         }
 
@@ -152,7 +155,8 @@ public class DBUtil {
              Statement stmt = conn.createStatement()) {
             String sql = "DROP SCHEMA IF EXISTS " + schemaName + " CASCADE";
             stmt.execute(sql);
-            logInfo("app", "TimescaleDB database deleted for server: " + schemaName);
+            logInfo("app", "TimescaleDB database deleted for server: {}", schemaName);
+            LogUtil.logInfo("app", "TimescaleDB database deleted for server: {}", schemaName);
 
         }
     }
@@ -207,12 +211,12 @@ public class DBUtil {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
-            System.out.println("Table " + fullTableName + " created");
-            logInfo(schemaName, "Table " + fullTableName + " created");
+            LogUtil.logInfo(schemaName, "Table {} created", fullTableName);
+            logInfo(schemaName, "Table {} created", fullTableName);
 
         } catch (SQLException e) {
-            System.err.println("Create table failed: " + e.getMessage());
-            logError(schemaName, "Create table failed: " + e.getMessage());
+            LogUtil.logError(schemaName, "Create table failed: {}", e.getMessage());
+            logError(schemaName, "Create table failed: {}", e.getMessage());
 
         }
     }
@@ -253,8 +257,8 @@ public class DBUtil {
 
             // 4. 只有真正创建了新表才记录日志
             if (tableJustCreated) {
-                System.out.println(schemaName + " : " + fullTableName + " created");
-                logInfo(schemaName, fullTableName + " created");
+                LogUtil.logInfo(schemaName, "{} created", fullTableName);
+                logInfo(schemaName, "{} created", fullTableName);
             }
 
             // 如果是新表，尝试创建 hypertable（需 superuser 权限）
@@ -270,8 +274,8 @@ public class DBUtil {
                 boolean hypertableJustCreated = !hypertableExistedBefore && hypertableExists(conn, fullTableName);
 
                 if (hypertableJustCreated) {
-                    System.out.println(schemaName + " : " + fullTableName + " Hypertable created");
-                    logInfo(schemaName, fullTableName + " Hypertable created");
+                    LogUtil.logInfo(schemaName, "{} Hypertable created", fullTableName);
+                    logInfo(schemaName, "{} Hypertable created", fullTableName);
                 }
 
                 // 设置数据保留策略（从配置获取天数）
@@ -281,13 +285,13 @@ public class DBUtil {
 
                     // 只有新表才记录保留策略日志
                     if (tableJustCreated) {
-                        System.out.println(schemaName + "." + safeTableName + " retention policy set to " + databaseRetentionDays + " days");
-                        logInfo(schemaName, safeTableName + " retention policy set to " + databaseRetentionDays + " days");
+                        LogUtil.logInfo(schemaName, "{} retention policy set to {} days", safeTableName, databaseRetentionDays);
+                        logInfo(schemaName, "{} retention policy set to {} days", safeTableName, databaseRetentionDays);
                     }
                 } catch (SQLException e) {
                     // 可能已存在保留策略或权限不足
                     if (tableJustCreated) {
-                        System.out.println(schemaName + " Failed to set retention policy: " + e.getMessage());
+                        LogUtil.logWarning(schemaName, "Failed to set retention policy: {}", e.getMessage());
                     }
                 }
             } catch (SQLException ignored) {
@@ -295,8 +299,8 @@ public class DBUtil {
             }
 
         } catch (SQLException e) {
-            System.out.println(schemaName + " Create table failed: " + e.getMessage());
-            logError(schemaName, "Create table failed: " + e.getMessage());
+            LogUtil.logError(schemaName, "Create table failed: {}", e.getMessage());
+            logError(schemaName, "Create table failed: {}", e.getMessage());
         }
     }
 
@@ -356,7 +360,7 @@ public class DBUtil {
                 boolean hypertableJustCreated = !hypertableExistedBefore && hypertableExists(conn, fullTableName);
 
                 if (hypertableJustCreated) {
-                    System.out.println(schemaName + " Log hypertable created");
+                    LogUtil.logInfo(schemaName, "Log hypertable created");
                     logInfo(schemaName, "Log hypertable created");
                 }
 
@@ -367,26 +371,26 @@ public class DBUtil {
 
                     // 只有新表才记录保留策略日志
                     if (tableJustCreated) {
-                        System.out.println(schemaName + "." + logTableName + " retention policy set to " + databaseRetentionDays + " days");
-                        logInfo(schemaName, logTableName + " retention policy set to " + databaseRetentionDays + " days");
+                        LogUtil.logInfo(schemaName, "{}.{} retention policy set to {} days", schemaName, logTableName, databaseRetentionDays);
+                        logInfo(schemaName, "{} retention policy set to {} days", logTableName, databaseRetentionDays);
                     }
                 } catch (SQLException e) {
                     // 可能已存在保留策略或权限不足
                     if (tableJustCreated) {
-                        System.out.println(schemaName + " Failed to set retention policy: " + e.getMessage());
+                        LogUtil.logWarning(schemaName, "Failed to set retention policy: {}", e.getMessage());
                     }
                 }
 
             } catch (SQLException e) {
                 // 可能已存在 hypertable 或权限不足
                 if (tableJustCreated) {
-                    System.out.println(schemaName + " Log table is already a hypertable or insufficient permissions: " + e.getMessage());
+                    LogUtil.logWarning(schemaName, "Log table is already a hypertable or insufficient permissions: {}", e.getMessage());
                 }
             }
 
         } catch (SQLException e) {
-            System.out.println(schemaName + " Create log table failed: " + e.getMessage());
-            logError(schemaName, "Create log table failed: " + e.getMessage());
+            LogUtil.logError(schemaName, "Create log table failed: {}", e.getMessage());
+            logError(schemaName, "Create log table failed: {}", e.getMessage());
         }
     }
 
@@ -444,7 +448,8 @@ public class DBUtil {
             pstmt.executeUpdate();
 
         } catch (SQLException e) {
-            logError(schemaName, "Batch insert failed into " + fullTableName + ": " + e.getMessage());
+            logError(schemaName, "Batch insert failed into {}: {}", fullTableName, e.getMessage());
+            LogUtil.logError(schemaName, "Batch insert failed into {}: {}", fullTableName, e.getMessage());
         }
     }
 
@@ -454,7 +459,7 @@ public class DBUtil {
     public static void logInfo(String schemaName, String log) {
         // 如果数据库未初始化，只打印控制台日志，不抛异常
         if (!configLoaded || dataSource == null) {
-            System.out.println("[LOG][" + schemaName + "] " + log);
+            LogUtil.logWarning(schemaName, log);
             return;
         }
 
@@ -472,7 +477,7 @@ public class DBUtil {
 
         } catch (SQLException e) {
             e.printStackTrace();
-            System.err.println("Insert log failed into " + fullTableName + ": " + e.getMessage() + " log content" + log);
+            LogUtil.logError(schemaName, "Insert log failed into {}: log content: {}", fullTableName, log);
         }
     }
 
@@ -657,8 +662,8 @@ public class DBUtil {
             }
         } catch (SQLException e) {
             e.printStackTrace();
-            System.err.println("TimescaleDB query error: " + e.getMessage());
-            logError(schemaName, "TimescaleDB query error: " + e.getMessage());
+            LogUtil.logError(schemaName, "TimescaleDB query error: {}", e.getMessage());
+            logError(schemaName, "TimescaleDB query error: {}", e.getMessage());
 
         }
 
@@ -697,7 +702,7 @@ public class DBUtil {
     private static Connection getConnection() throws SQLException {
         // 如果数据库未初始化，只打印控制台日志，不抛异常
         if (!configLoaded || dataSource == null) {
-            System.out.println("Trying to get connection, but database not initialized");
+            LogUtil.logWarning("app", "Trying to get connection, but database not initialized");
             return null;
         }
         return dataSource.getConnection(); // 从池中借出连接
@@ -718,10 +723,10 @@ public class DBUtil {
         if (dataSource != null) {
             try {
                 dataSource.close(); // Druid 会关闭连接池，并反注册其代理驱动
-                System.out.println("TimescaleDB datasource shut down");
+                LogUtil.logInfo("app", "TimescaleDB datasource shut down");
             } catch (Exception e) {
-                System.err.println("Error closing Druid DataSource: " + e.getMessage());
-                logError("app", "Error closing Druid DataSource: " + e.getMessage());
+                LogUtil.logError("app", "Error closing Druid DataSource: {}", e.getMessage());
+                logError("app", "Error closing Druid DataSource: {}", e.getMessage());
 
             }
             dataSource = null;
@@ -745,13 +750,13 @@ public class DBUtil {
             if (driver.getClass().getClassLoader() == currentClassLoader) {
                 try {
                     DriverManager.deregisterDriver(driver);
-                    System.out.println("Deregistering JDBC driver: " + driver.getClass().getName());
-                    logInfo("app", "Deregistered JDBC driver: " + driver.getClass().getName());
+                    LogUtil.logInfo("app", "Deregistering JDBC driver: {}", driver.getClass().getName());
+                    logInfo("app", "Deregistered JDBC driver: {}", driver.getClass().getName());
 
-                    System.out.println("Deregistered JDBC driver completed");
+                    LogUtil.logInfo("app", "Deregistered JDBC driver completed");
                 } catch (SQLException e) {
-                    System.err.println("Failed to deregister driver: " + e.getMessage());
-                    logError("app", "Failed to deregister driver: " + e.getMessage());
+                    LogUtil.logError("app", "Failed to deregister driver: {}", e.getMessage());
+                    logError("app", "Failed to deregister driver: {}", e.getMessage());
 
                 }
             }
@@ -791,13 +796,13 @@ public class DBUtil {
                 return rs.next(); // 能读到结果即视为连通
             }
         } catch (ClassNotFoundException e) {
-            System.err.println("PostgreSQL driver not found: " + e.getMessage());
-            logInfo("app", "PostgreSQL driver not found: " + e.getMessage());
+            LogUtil.logError("app", "PostgreSQL driver not found: {}", e.getMessage());
+            logError("app", "PostgreSQL driver not found: {}", e.getMessage());
 
             return false;
         } catch (SQLException e) {
-            System.err.println("PostgreSQL test connection failed: " + e.getMessage());
-            logError("app", "PostgreSQL test connection failed: " + e.getMessage());
+            LogUtil.logError("app", "PostgreSQL test connection failed: {}", e.getMessage());
+            logError("app", "PostgreSQL test connection failed: {}", e.getMessage());
 
             return false;
         } finally {
@@ -823,12 +828,12 @@ public class DBUtil {
         if (file.exists()) {
             boolean deleted = file.delete();
             if (deleted) {
-                System.out.println("Deleted TimescaleDB config file: " + path);
-                logInfo("app", "Deleted TimescaleDB config file: " + path);
+                LogUtil.logInfo("app", "Deleted TimescaleDB config file: {}", path);
+                logInfo("app", "Deleted TimescaleDB config file: {}", path);
 
             } else {
-                System.err.println("Failed to delete TimescaleDB config file: " + path);
-                logInfo("app", "Failed to delete TimescaleDB config file: " + path);
+                LogUtil.logError("app", "Failed to delete TimescaleDB config file: {}", path);
+                logError("app", "Failed to delete TimescaleDB config file: {}", path);
 
             }
             configLoaded = false;
@@ -897,7 +902,8 @@ public class DBUtil {
                 logMessages.add(formattedLog);
             }
         } catch (SQLException e) {
-            logInfo("app", "Query logs failed for schema " + schemaName + ": " + e.getMessage());
+            logError("app", "Query logs failed for schema {}: {}", schemaName, e.getMessage());
+            LogUtil.logError("app", "Query logs failed for schema {}: {}", schemaName, e.getMessage());
             e.printStackTrace();
         }
 

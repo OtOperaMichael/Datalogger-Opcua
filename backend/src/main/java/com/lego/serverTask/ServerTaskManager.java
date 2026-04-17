@@ -2,6 +2,7 @@ package com.lego.serverTask;
 
 import com.lego.pojo.Server;
 import com.lego.util.DBUtil;
+import com.lego.util.LogUtil;
 import com.lego.util.TemplateUtil;
 
 import java.util.Map;
@@ -99,7 +100,7 @@ public class ServerTaskManager {
             try {
                 // 调用 shutdown 清理资源
                 datalogger.shutdown();
-                System.out.println("Stopped monitoring task for server: " + id);
+                LogUtil.logInfo(server.getName(), "Stopped monitoring task for server: {}", id);
                 DBUtil.logInfo(server.getName(), "Stopped monitoring task for server: {}", id);
             } catch (Exception e) {
                 DBUtil.logError(server.getName(), "Stopping monitoring task for server {}: {}", id, e.getMessage());
@@ -113,7 +114,7 @@ public class ServerTaskManager {
      * 停止所有任务（Tomcat 关闭时调用）
      */
     public void shutdown() {
-        System.out.println("Shutting down all PLC monitoring tasks...");
+        LogUtil.logInfo("app", "Shutting down all OPC UA monitoring tasks...");
         DBUtil.logInfo("app", "Shutting down all OPC UA monitoring tasks...");
 
         // 遍历所有 datalogger 实例并关闭

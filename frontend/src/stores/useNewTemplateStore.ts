@@ -1,6 +1,6 @@
 import {defineStore} from 'pinia'
 import {
-  NodeType, DataType,
+  NodeGroupType, DataType,
   type CustomNodeInterface,
   type CustomTableInterface,
   type CustomModuleInterface,
@@ -12,14 +12,14 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
   state: () => ({
     id: "",
     name: "",
-    sampleInterval: 1000,
     port: "4840",
     postfix: "",
     custom: {
       enable: true,
       tableList: Array.from({length: 1}, () => ({
         name: "",
-        nodeType: NodeType.SCALAR,
+        sampleInterval: 1000,
+        nodeGroupType: NodeGroupType.SCALAR,
         nodeList: Array.from({length: 10}, () => ({
           name: "",
           nodeId: "",
@@ -46,7 +46,6 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return {
         id: this.id,
         name: this.name,
-        sampleInterval: this.sampleInterval,
         port: this.port,
         postfix: this.postfix,
         custom: JSON.parse(JSON.stringify(this.custom)),
@@ -62,7 +61,6 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
     loadTemplate(data: TemplateInterface) {
       this.id = data.id;
       this.name = data.name;
-      this.sampleInterval = data.sampleInterval;
       this.port = data.port;
       this.postfix = data.postfix || "";
       this.custom = data.custom ? JSON.parse(JSON.stringify(data.custom)) : this.custom;
@@ -85,28 +83,6 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
           message: 'Template name must start with a lowercase letter and can only contain lowercase letters, digits, underscores (_), or hyphens (-)'
         }
       }
-      return {valid: true}
-    },
-
-    // 校验 sampleInterval
-    validateSampleInterval() {
-      const value = this.sampleInterval
-
-      // 检查是否为数字
-      if (isNaN(value)) {
-        return {valid: false, message: 'Sample interval must be a number'}
-      }
-
-      // 检查是否为整数
-      if (!Number.isInteger(value)) {
-        return {valid: false, message: 'Sample interval must be an integer'}
-      }
-
-      // 检查范围 [100, 1000]
-      if (value < 100 || value > 1000) {
-        return {valid: false, message: 'Sample interval must be between 100 and 1000'}
-      }
-
       return {valid: true}
     },
 
@@ -161,12 +137,33 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return {valid: true}
     },
 
+    // 校验单个 table 的 sampleInterval
+    validateSampleInterval(sampleInterval: number, tableIndex: number): { valid: boolean; message?: string } {
+      // 检查是否为数字
+      if (isNaN(sampleInterval)) {
+        return {valid: false, message: `Table ${tableIndex + 1}: Sample interval must be a number`}
+      }
+
+      // 检查是否为整数
+      if (!Number.isInteger(sampleInterval)) {
+        return {valid: false, message: `Table ${tableIndex + 1}: Sample interval must be an integer`}
+      }
+
+      // 检查范围 [100, 1000]
+      if (sampleInterval < 100 || sampleInterval > 1000) {
+        return {valid: false, message: `Table ${tableIndex + 1}: Sample interval must be between 100 and 1000`}
+      }
+
+      return {valid: true}
+    },
+
     // 校验单个 table, custom module
     validateSingleCustomTable(table: CustomTableInterface, index: number) {
       const errors = []
       const tn = table.name
-      const nt = table.nodeType
+      const nt = table.nodeGroupType
       const nl = table.nodeList
+      const si = table.sampleInterval
 
       // 1. tableName 不能为空
       if (tn === '') {
@@ -181,12 +178,18 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         }
       }
 
-      // 2. nodeType 必须是 SCALAR 或 ARRAY
-      if (nt !== NodeType.SCALAR && nt !== NodeType.ARRAY) {
+      // 2. 校验 sampleInterval
+      const intervalCheck = this.validateSampleInterval(si, index)
+      if (!intervalCheck.valid) {
+        errors.push(intervalCheck.message!)
+      }
+
+      // 3. nodeType 必须是 SCALAR 或 ARRAY
+      if (nt !== NodeGroupType.SCALAR && nt !== NodeGroupType.ARRAY) {
         errors.push(`Table ${index + 1}: Node type must be SCALAR or ARRAY`)
       }
 
-      // 3. nodeList 不能为空
+      // 4. nodeList 不能为空
       if (!nl || nl.length === 0) {
         errors.push(`Table ${index + 1}: Node list is required and cannot be empty`)
       } else {
@@ -229,7 +232,7 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
           }
         }
 
-        // 4. nodeList 所有 nodeName 不能重复
+        // 5. nodeList 所有 nodeName 不能重复
         const seenNames = new Set()
         for (let i = 0; i < nl.length; i++) {
           const node = nl[i]
@@ -298,19 +301,13 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         return {valid: false, field: 'templateName', message: nameCheck.message}
       }
 
-      //2. sample interval不能小于100 大于1000
-      const intervalCheck = this.validateSampleInterval()
-      if (!intervalCheck.valid) {
-        return {valid: false, field: 'sampleInterval', message: intervalCheck.message}
-      }
-
-      //3. hostCpuSlot 格式必须为 “x,x” x为数字
+      //2. hostCpuSlot 格式必须为 “x,x” x为数字
       const portCheck = this.validatePort()
       if (!portCheck.valid) {
         return {valid: false, field: 'hostCpuSlot', message: portCheck.message}
       }
 
-      //4. postfix 校验
+      //3. postfix 校验
       const postfixCheck = this.validatePostfix()
       if (!postfixCheck.valid) {
         return {valid: false, field: 'postfix', message: postfixCheck.message}
@@ -352,7 +349,8 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
 
         module.tableList.push({
           name: "",
-          nodeType: NodeType.SCALAR,
+          sampleInterval: 1000,
+          nodeGroupType: NodeGroupType.SCALAR,
           nodeList: Array.from({length: 10}, () => ({
             name: "",
             nodeId: "",

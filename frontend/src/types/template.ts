@@ -8,7 +8,7 @@
 
 //1. custom module
 
-enum NodeType {
+enum NodeGroupType {
   SCALAR, //int, double, string, bool....
   ARRAY
 }
@@ -28,7 +28,8 @@ interface CustomNodeInterface {
 
 interface CustomTableInterface {
   name: string;
-  nodeType: NodeType;
+  sampleInterval: number;
+  nodeGroupType: NodeGroupType;
   nodeList: CustomNodeInterface[];
 }
 
@@ -45,7 +46,6 @@ interface CustomModuleInterface {
 interface TemplateInterface {
   id: string;
   name: string;
-  sampleInterval: number;
   port: string;
   postfix: string; //optional
   custom: CustomModuleInterface;
@@ -54,7 +54,7 @@ interface TemplateInterface {
 }
 
 export {
-  NodeType,
+  NodeGroupType,
   DataType,
   type CustomNodeInterface,
   type CustomTableInterface,

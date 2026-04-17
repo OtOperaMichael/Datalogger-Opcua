@@ -46,6 +46,10 @@ public class InstanceController extends BaseController {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
             return;
         }
+        if (queryLoad.getModuleName() == null || queryLoad.getModuleName().trim().isEmpty()) {
+            WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
+            return;
+        }
         if (queryLoad.getTableName() == null || queryLoad.getTableName().trim().isEmpty()) {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
             return;
@@ -82,8 +86,33 @@ public class InstanceController extends BaseController {
             return;
         }
 
-        // 查找表信息
-        Table table = template.getTableList().stream()
+        // 根据 moduleName 获取对应的模块
+        com.lego.pojo.template.custom.CustomModule module = null;
+        String moduleName = queryLoad.getModuleName();
+        
+        switch (moduleName.toLowerCase()) {
+            case "custom":
+                module = template.getCustom();
+                break;
+            case "alarm":
+                module = template.getAlarm();
+                break;
+            case "communication":
+                module = template.getCommunication();
+                break;
+            default:
+                WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
+                return;
+        }
+
+        // 检查模块是否存在且已启用
+        if (module == null || !module.isEnable()) {
+            WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
+            return;
+        }
+
+        // 在对应模块的 tablelist 中查找表信息
+        Table table = module.getTablelist().stream()
                 .filter(t -> queryLoad.getTableName().equals(t.getName()))
                 .findFirst()
                 .orElse(null);
@@ -92,6 +121,7 @@ public class InstanceController extends BaseController {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
             return;
         }
+        
         //调用 service查询
         List<Map<String, Object>> results =  instanceService.query(queryLoad);
         //返回结果

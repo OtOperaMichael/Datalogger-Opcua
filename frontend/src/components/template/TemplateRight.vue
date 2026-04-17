@@ -159,15 +159,6 @@ async function saveTemplate() {
         />
       </div>
       <div class="inputBox">
-        Sample interval (ms):
-        <a-input-number
-          :disabled="!loginUserStore.getIsLoggedIn"
-          v-model:value="templateStore.sampleInterval"
-          :min="100"
-          :max="1000"
-        />
-      </div>
-      <div class="inputBox">
         Port:
         <a-input
           style="width: 100px;"

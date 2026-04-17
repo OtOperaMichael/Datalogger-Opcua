@@ -92,7 +92,7 @@ public class SystemConfigUtil {
         File configFile = new File(FIlepathUtil.getSystemConfigPath());
         if (configFile.exists()) {
             if (configFile.delete()) {
-                System.out.println("System config file deleted successfully");
+                LogUtil.logInfo("app","System config file deleted successfully");
                 DBUtil.logInfo("app", "System config file deleted");
 
                 // 重置实例和配置
@@ -103,7 +103,7 @@ public class SystemConfigUtil {
                 }
                 return true;
             } else {
-                System.err.println("Failed to delete system config file");
+                LogUtil.logError("app","Failed to delete system config file");
                 DBUtil.logError("app", "Failed to delete system config file");
             }
         }
@@ -228,7 +228,7 @@ public class SystemConfigUtil {
         try (FileOutputStream fos = new FileOutputStream(configFile)) {
             props.store(fos, "System Configuration - Saved via Web UI");
 
-            System.out.println("System config saved: adminPassword=" +
+            LogUtil.logInfo("app","System config saved: adminPassword=" +
                     maskPassword(this.adminPassword) +
                     ", maxServerCount=" + this.maxServerCount +
                     ", maxTableCount=" + this.maxTableCount +
@@ -302,16 +302,16 @@ public class SystemConfigUtil {
                         this.dataSaveBatchSize,
                         this.logLevel
                 );
-                System.out.println(configLog);
+                LogUtil.logInfo("app",configLog);
                 DBUtil.logInfo("app", configLog);
 
             } catch (IOException e) {
                 e.printStackTrace();
-                System.err.println("Failed to load config, using defaults");
+                LogUtil.logError("app","Failed to load config, using defaults");
                 setDefaultConfig();
             }
         } else {
-            System.out.println("System config file not found, using default config");
+            LogUtil.logWarning("app","System config file not found, using default config");
             setDefaultConfig();
         }
     }

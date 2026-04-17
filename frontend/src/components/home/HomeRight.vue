@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import {useSelectedServerStore} from "@/stores/useSelectedServerStore.ts";
 import {useTemplateListStore} from "@/stores/useTemplateListStore.ts";
-import type {TemplateInterface, CustomTableInterface} from "@/types/template.ts";
+import type {TemplateInterface, CustomTableInterface, CustomModuleInterface} from "@/types/template.ts";
 import {ref, computed, watch} from 'vue';
 import {message} from 'ant-design-vue';
 import request from "@/utils/request.ts";
 import * as XLSX from 'xlsx';
 import dayjs from 'dayjs';
-import type { Dayjs } from 'dayjs';
-import { SearchOutlined, DownloadOutlined } from '@ant-design/icons-vue';
+import type {Dayjs} from 'dayjs';
+import {SearchOutlined, DownloadOutlined} from '@ant-design/icons-vue';
 
 const serverStore = useSelectedServerStore();
 const templateListStore = useTemplateListStore();
@@ -20,6 +20,7 @@ const template = computed(() => {
 
 // Query form state
 const queryForm = ref({
+  selectedModule: '' as 'custom' | 'alarm' | 'communication' | '',
   selectedTable: '',
   startTime: null as Date | null,
   endTime: null as Date | null
@@ -30,18 +31,47 @@ const queryResults = ref<any[]>([]);
 const loading = ref(false);
 const exporting = ref(false);
 
-// Computed property for available tables
+// Computed property for available modules (only enabled modules)
+const availableModules = computed(() => {
+  if (!template.value) return [];
+
+  const modules = [];
+  if (template.value.custom?.enable) {
+    modules.push({ value: 'custom', label: 'Custom Module' });
+  }
+  if (template.value.alarm?.enable) {
+    modules.push({ value: 'alarm', label: 'Alarm Module' });
+  }
+  if (template.value.communication?.enable) {
+    modules.push({ value: 'communication', label: 'Communication Module' });
+  }
+
+  return modules;
+});
+
+// Computed property for available tables in selected module
 const availableTables = computed(() => {
-  if (!template.value?.tableList) return [];
-  return template.value.tableList.filter((table: CustomTableInterface) => table.name && table.name.trim() !== '');
+  if (!template.value || !queryForm.value.selectedModule) return [];
+
+  const module = template.value[queryForm.value.selectedModule as keyof TemplateInterface] as CustomModuleInterface;
+  if (!module?.tableList) return [];
+
+  return module.tableList.filter((table: CustomTableInterface) => table.name && table.name.trim() !== '');
 });
 
 // Reset form when server changes
 watch(() => serverStore.name, () => {
   resetQuery();
-}, { immediate: true });
+}, {immediate: true});
+
+// Reset table selection when module changes
+watch(() => queryForm.value.selectedModule, () => {
+  queryForm.value.selectedTable = '';
+  queryResults.value = [];
+});
 
 function resetQuery() {
+  queryForm.value.selectedModule = '';
   queryForm.value.selectedTable = '';
   queryForm.value.startTime = null;
   queryForm.value.endTime = null;
@@ -50,6 +80,11 @@ function resetQuery() {
 
 // Validate query parameters
 function validateQuery() {
+  if (!queryForm.value.selectedModule) {
+    message.error('Please select a module');
+    return false;
+  }
+
   if (!queryForm.value.selectedTable) {
     message.error('Please select a table');
     return false;
@@ -93,6 +128,7 @@ async function executeQuery() {
 
     const payload = {
       serverName: serverStore.name,
+      moduleName: queryForm.value.selectedModule,
       tableName: queryForm.value.selectedTable,
       startTime: formatDate(queryForm.value.startTime),
       endTime: formatDate(queryForm.value.endTime),
@@ -134,7 +170,7 @@ async function exportToExcel() {
 
     // Generate filename
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-    const filename = `${serverStore.name}_${queryForm.value.selectedTable}_${timestamp}.xlsx`;
+    const filename = `${serverStore.name}_${queryForm.value.selectedModule}_${queryForm.value.selectedTable}_${timestamp}.xlsx`;
 
     // Export file
     XLSX.writeFile(wb, filename);
@@ -209,14 +245,24 @@ function isDateKey(key: string | number): boolean {
         justify="space-between"
         class="query-toolbar"
       >
-        <!-- 左侧：表选择和时间范围 -->
+        <!-- 左侧：模块选择、表选择和时间范围 -->
         <a-flex align="center" gap="12">
+          <!-- 模块选择 -->
+          <a-select
+            v-model:value="queryForm.selectedModule"
+            placeholder="Choose a module"
+            :options="availableModules"
+            allow-clear
+            style="min-width: 180px; width: 200px;"
+          />
+
           <!-- 表选择 -->
           <a-select
             v-model:value="queryForm.selectedTable"
             placeholder="Choose a table"
             :options="availableTables.map((table: CustomTableInterface) => ({ value: table.name, label: table.name }))"
             allow-clear
+            :disabled="!queryForm.selectedModule"
             style="min-width: 180px; width: 200px;"
           />
 
@@ -238,10 +284,10 @@ function isDateKey(key: string | number): boolean {
             type="primary"
             @click="executeQuery"
             :loading="loading"
-            :disabled="!queryForm.selectedTable || !queryForm.startTime || !queryForm.endTime"
+            :disabled="!queryForm.selectedModule || !queryForm.selectedTable || !queryForm.startTime || !queryForm.endTime"
           >
             <template #icon>
-              <SearchOutlined />
+              <SearchOutlined/>
             </template>
             Query Data
           </a-button>
@@ -259,7 +305,7 @@ function isDateKey(key: string | number): boolean {
             :disabled="queryResults.length === 0 || loading"
           >
             <template #icon>
-              <DownloadOutlined />
+              <DownloadOutlined/>
             </template>
             Export to Excel
           </a-button>
@@ -270,6 +316,7 @@ function isDateKey(key: string | number): boolean {
       <div v-if="queryResults.length > 0" class="results-section">
         <div class="results-header">
           <span class="query-info">
+            Module: <strong>{{ queryForm.selectedModule }}</strong> |
             Table: <strong>{{ queryForm.selectedTable }}</strong> |
             Time Range: <strong>{{ formatDate(queryForm.startTime) }}</strong> to
             <strong>{{ formatDate(queryForm.endTime) }}</strong> |

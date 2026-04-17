@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed} from 'vue';
 import {useNewTemplateStore} from "@/stores/useNewTemplateStore.ts";
-import {NodeType, DataType, type CustomTableInterface} from "@/types/template.ts";
+import {NodeGroupType, DataType, type CustomTableInterface} from "@/types/template.ts";
 import {useLoginUserStore} from "@/stores/useLoginUserStore.ts";
 import {useSystemConfigStore} from "@/stores/useSystemConfigStore.ts";
 
@@ -22,7 +22,8 @@ const isDisabled = computed(() => !loginUserStore.getIsLoggedIn || !template.cus
 const tableData = computed<CustomTableInterface>(() => {
   return template.custom.tableList[props.tableIndex] || {
     name: "",
-    nodeType: NodeType.SCALAR,
+    sampleInterval: 1000,
+    nodeGroupType: NodeGroupType.SCALAR,
     nodeList: Array.from({length: 10}, () => ({
       name: "",
       nodeId: "",
@@ -32,8 +33,8 @@ const tableData = computed<CustomTableInterface>(() => {
 });
 
 const nodeTypeOptions = [
-  {label: 'SCALAR', value: NodeType.SCALAR},
-  {label: 'ARRAY', value: NodeType.ARRAY},
+  {label: 'SCALAR', value: NodeGroupType.SCALAR},
+  {label: 'ARRAY', value: NodeGroupType.ARRAY},
 ]
 
 const dataTypeOptions = [
@@ -63,10 +64,19 @@ function removeNode(index: number) {
       />
     </div>
     <div class="inputBox">
+      Sample interval (ms):
+      <a-input-number
+        v-model:value="tableData.sampleInterval"
+        :disabled="isDisabled"
+        :min="100"
+        :max="1000"
+      />
+    </div>
+    <div class="inputBox">
       Node type:
       <a-select
         style="width: 120px;"
-        v-model:value="tableData.nodeType"
+        v-model:value="tableData.nodeGroupType"
         :options="nodeTypeOptions"
         :disabled="isDisabled"
       />
