@@ -67,7 +67,7 @@ public class OpcUaNodeGroup {
                 
                 // 如果 NodeId 解析失败，跳过该节点
                 if (opcUaNode.getNodeId() == null) {
-                    LogUtil.logWarning("serverName", "Skipping node '{}' due to invalid NodeId: {}",
+                    LogUtil.logWarning(true,"serverName", "Skipping node '{}' due to invalid NodeId: {}",
                         node.getName(), node.getNodeId());
                     failCount++;
                     continue;
@@ -80,7 +80,7 @@ public class OpcUaNodeGroup {
             }
             
             if (failCount > 0) {
-                LogUtil.logWarning("serverName", "NodeGroup '{}': {} nodes created successfully, {} nodes skipped due to invalid NodeId",
+                LogUtil.logWarning(true,"serverName", "NodeGroup '{}': {} nodes created successfully, {} nodes skipped due to invalid NodeId",
                     this.name, successCount, failCount);
             }
         }

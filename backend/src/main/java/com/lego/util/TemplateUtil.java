@@ -26,7 +26,7 @@ public class TemplateUtil {
         
         // 检查模板名称是否为空
         if (templateName == null || templateName.isEmpty()) {
-            DBUtil.logWarning("app", "Server {} has no template configured", server.getName());
+            LogUtil.logWarning(true, "app", "Server {} has no template configured", server.getName());
             return null;
         }
 
@@ -40,7 +40,7 @@ public class TemplateUtil {
 
         // 如果未找到，记录日志
         if (template == null) {
-            DBUtil.logWarning("app", "Template not found: {} for server: {}", templateName, server.getName());
+            LogUtil.logWarning(true, "app", "Template not found: {} for server: {}", templateName, server.getName());
         }
 
         return template;

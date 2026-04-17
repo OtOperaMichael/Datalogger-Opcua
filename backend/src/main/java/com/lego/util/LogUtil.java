@@ -19,56 +19,91 @@ public class LogUtil {
         System.out.println(msg);
     }
 
-    public static void logInfo(String schema, String msg) {
-        String formattedLog = "[Info]: " + schema +", "+ msg;
+    public static void logInfo(Boolean dbSave, String schema, String msg) {
+        String formattedLog = "[Info]: " + schema + ", " + msg;
+        String logDbMsg = "[Info]: " + msg;
 
         // 调用原有的 logInfo 方法
         logInfo(formattedLog);
 
+        // 如果需要保存到数据库，则调用 saveToDB 方法
+        if (dbSave) {
+            DBUtil.logInfo(schema, logDbMsg);
+        }
+
     }
 
 
-    public static void logInfo(String schema, String format, Object... args) {
-        String formattedLog = "[Info]: " + schema +", "+ formatLogMessage(format, args);
+    public static void logInfo(Boolean dbSave,String schema, String format, Object... args) {
+        String formattedLog = "[Info]: " + schema + ", " + formatLogMessage(format, args);
+        String logDbMsg = "[Info]: " + formatLogMessage(format, args);
 
         // 调用原有的 logInfo 方法
         logInfo(formattedLog);
 
-    }
-
-    public static void logWarning(String schema, String format, Object... args) {
-        // 格式化日志消息
-        String formattedLog = "[Warning]: "+ schema +", "+  formatLogMessage(format, args);
-
-        // 调用原有的 logInfo 方法
-        logInfo(formattedLog);
-    }
-
-    public static void logError(String schema, String format, Object... args) {
-        // 格式化日志消息
-        String formattedLog = "[Error]: " + schema +", "+  formatLogMessage(format, args);
-
-        // 调用原有的 logInfo 方法
-        logInfo(formattedLog);
-    }
-
-    public static void logDebugL1(String schema, String format, Object... args) {
-        if (LOG_LEVEL >= 1) {
-            // 格式化日志消息
-            String formattedLog = "[Debug]: " + schema +", "+  formatLogMessage(format, args);
-
-            // 调用原有的 logInfo 方法
-            logInfo(formattedLog);
+        // 如果需要保存到数据库，则调用 saveToDB 方法
+        if (dbSave) {
+            DBUtil.logInfo(schema, logDbMsg);
         }
     }
 
-    public static void logDebugL2(String schema, String format, Object... args) {
-        if (LOG_LEVEL >= 2) {
+    public static void logWarning(Boolean dbSave,String schema, String format, Object... args) {
+        // 格式化日志消息
+        String formattedLog = "[Warning]: " + schema + ", " + formatLogMessage(format, args);
+        String logDbMsg = "[Warning]: " + formatLogMessage(format, args);
+
+        // 调用原有的 logInfo 方法
+        logInfo(formattedLog);
+
+        // 如果需要保存到数据库，则调用 saveToDB 方法
+        if (dbSave) {
+            DBUtil.logInfo(schema, logDbMsg);
+        }
+    }
+
+    public static void logError(Boolean dbSave,String schema, String format, Object... args) {
+        // 格式化日志消息
+        String formattedLog = "[Error]: " + schema + ", " + formatLogMessage(format, args);
+        String logDbMsg = "[Error]: " + formatLogMessage(format, args);
+
+        // 调用原有的 logInfo 方法
+        logInfo(formattedLog);
+
+        // 如果需要保存到数据库，则调用 saveToDB 方法
+        if (dbSave) {
+            DBUtil.logInfo(schema, logDbMsg);
+        }
+    }
+
+    public static void logDebugL1(Boolean dbSave,String schema, String format, Object... args) {
+        if (LOG_LEVEL >= 1) {
             // 格式化日志消息
-            String formattedLog = "Debug: " + formatLogMessage(format, args);
+            String formattedLog = "[Debug]: " + schema + ", " + formatLogMessage(format, args);
+            String logDbMsg = "[Debug]: " + formatLogMessage(format, args);
 
             // 调用原有的 logInfo 方法
             logInfo(formattedLog);
+
+            // 如果需要保存到数据库，则调用 saveToDB 方法
+            if (dbSave) {
+                DBUtil.logInfo(schema, logDbMsg);
+            }
+        }
+    }
+
+    public static void logDebugL2(Boolean dbSave,String schema, String format, Object... args) {
+        if (LOG_LEVEL >= 2) {
+            // 格式化日志消息
+            String formattedLog = "Debug: "+ schema + formatLogMessage(format, args);
+            String logDbMsg = "[Debug]: " + formatLogMessage(format, args);
+
+            // 调用原有的 logInfo 方法
+            logInfo(formattedLog);
+
+            // 如果需要保存到数据库，则调用 saveToDB 方法
+            if (dbSave) {
+                DBUtil.logInfo(schema, logDbMsg);
+            }
         }
     }
 

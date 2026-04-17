@@ -68,8 +68,7 @@ public class DataConsumerPool {
             return t;
         });
 
-        DBUtil.logInfo("app", "DataConsumerPool created with {} consumers", CONSUMER_COUNT);
-        LogUtil.logInfo("app", "DataConsumerPool created with {} consumers", CONSUMER_COUNT);
+        LogUtil.logInfo(true, "app", "DataConsumerPool created with {} consumers", CONSUMER_COUNT);
     }
 
     /**
@@ -87,8 +86,7 @@ public class DataConsumerPool {
         }
         running = true;
 
-        DBUtil.logInfo("app", "Started {} data consumers", CONSUMER_COUNT);
-        LogUtil.logInfo("app", "Started {} data consumers", CONSUMER_COUNT);
+        LogUtil.logInfo(true, "app", "Started {} data consumers", CONSUMER_COUNT);
     }
 
     /**
@@ -106,7 +104,7 @@ public class DataConsumerPool {
                 schedulerService.shutdownNow();
                 // 再给一点时间让任务响应中断
                 if (!schedulerService.awaitTermination(2, TimeUnit.SECONDS)) {
-                    LogUtil.logError("app", "Scheduler did not terminate");
+                    LogUtil.logError(true,"app", "Scheduler did not terminate");
                 }
             }
         } catch (InterruptedException e) {
@@ -122,12 +120,10 @@ public class DataConsumerPool {
         if (!remainingTasks.isEmpty()) {
             DataConsumer tempConsumer = new DataConsumer(CONSUMER_COUNT);
             tempConsumer.flushBatch(remainingTasks);
-            LogUtil.logInfo("app", "Flushed remaining {} tasks on pool stop", remainingTasks.size());
-            DBUtil.logInfo("app", "Flushed remaining {} tasks on pool stop", remainingTasks.size());
+            LogUtil.logInfo(true, "app", "Flushed remaining {} tasks on pool stop", remainingTasks.size());
         }
 
-        DBUtil.logInfo("app", "DataConsumerPool stopped. Total processed: {}", processedCount.get());
-        LogUtil.logInfo("app", "DataConsumerPool stopped. Total processed: {}", processedCount.get());
+        LogUtil.logInfo(true, "app", "DataConsumerPool stopped. Total processed: {}", processedCount.get());
     }
 
     public int getProcessingCount() {
@@ -188,8 +184,7 @@ public class DataConsumerPool {
             } catch (Throwable t) {
 
                 // 捕获 Throwable 而不仅仅是 Exception，确保万无一失
-                DBUtil.logError("app", "FATAL: DataConsumer task failed unexpectedly. Consumer will attempt to continue. Error: {}", t.getMessage());
-                LogUtil.logError("app", "FATAL: DataConsumer task failed unexpectedly. Error: {}", t.getMessage());
+                LogUtil.logError(true, "app", "FATAL: DataConsumer task failed unexpectedly. Consumer will attempt to continue. Error: {}", t.getMessage());
                 t.printStackTrace();
                 // 即使发生严重错误，也不抛出异常，让 run() 方法正常结束
 
@@ -238,7 +233,7 @@ public class DataConsumerPool {
             stopTime = System.currentTimeMillis();
             
             // 使用占位符记录调试日志
-            LogUtil.logDebugL1("app", "queue size={}; consumed {} tasks in {}ms", 
+            LogUtil.logDebugL1(true,"app", "queue size={}; consumed {} tasks in {}ms", 
                 dataQueue.size(), batch.size(), (stopTime - startTime));
 
         }
@@ -279,8 +274,7 @@ public class DataConsumerPool {
                 processedCount.addAndGet(batch.size());
 
             } catch (Exception e) {
-                DBUtil.logError("app", "Batch write failed: {}", e.getMessage());
-                LogUtil.logError("app", "Batch write failed: {}", e.getMessage());
+                LogUtil.logError(true, "app", "Batch write failed: {}", e.getMessage());
                 e.printStackTrace();
             }
         }

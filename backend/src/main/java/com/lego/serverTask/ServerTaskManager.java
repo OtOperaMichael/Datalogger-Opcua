@@ -52,7 +52,7 @@ public class ServerTaskManager {
         if (dataloggerInstances.containsKey(id)) {
             OpcuaDatalogger existingLogger = dataloggerInstances.get(id);
             if (existingLogger != null && existingLogger.isRunning()) {
-                DBUtil.logWarning(server.getName(), "Task for server {} is already running", id);
+                LogUtil.logWarning(true, server.getName(), "Task for server {} is already running", id);
                 return;
             }
             // 如果存在但未运行，先清理
@@ -71,17 +71,17 @@ public class ServerTaskManager {
 
             // 检查是否启动成功
             if (datalogger.isRunning()) {
-                DBUtil.logInfo(server.getName(), "Started monitoring task for server: {}", id);
+                LogUtil.logInfo(true, server.getName(), "Started monitoring task for server: {}", id);
             } else {
                 // 启动失败，清理
                 dataloggerInstances.remove(id);
-                DBUtil.logWarning(server.getName(), "Failed to start monitoring task for server: {}", id);
+                LogUtil.logWarning(true, server.getName(), "Failed to start monitoring task for server: {}", id);
             }
 
         } catch (Exception e) {
             // 启动异常，清理资源
             dataloggerInstances.remove(id);
-            DBUtil.logError(server.getName(), "Error starting monitoring task for server {}: {}", id, e.getMessage());
+            LogUtil.logError(true, server.getName(), "Error starting monitoring task for server {}: {}", id, e.getMessage());
         }
     }
 
@@ -100,13 +100,12 @@ public class ServerTaskManager {
             try {
                 // 调用 shutdown 清理资源
                 datalogger.shutdown();
-                LogUtil.logInfo(server.getName(), "Stopped monitoring task for server: {}", id);
-                DBUtil.logInfo(server.getName(), "Stopped monitoring task for server: {}", id);
+                LogUtil.logInfo(true, server.getName(), "Stopped monitoring task for server: {}", id);
             } catch (Exception e) {
-                DBUtil.logError(server.getName(), "Stopping monitoring task for server {}: {}", id, e.getMessage());
+                LogUtil.logError(true, server.getName(), "Stopping monitoring task for server {}: {}", id, e.getMessage());
             }
         } else {
-            DBUtil.logWarning(server.getName(), "No running task found for server: {}", id);
+            LogUtil.logWarning(true, server.getName(), "No running task found for server: {}", id);
         }
     }
 
@@ -114,8 +113,7 @@ public class ServerTaskManager {
      * 停止所有任务（Tomcat 关闭时调用）
      */
     public void shutdown() {
-        LogUtil.logInfo("app", "Shutting down all OPC UA monitoring tasks...");
-        DBUtil.logInfo("app", "Shutting down all OPC UA monitoring tasks...");
+        LogUtil.logInfo(true, "app", "Shutting down all OPC UA monitoring tasks...");
 
         // 遍历所有 datalogger 实例并关闭
         for (Map.Entry<String, OpcuaDatalogger> entry : dataloggerInstances.entrySet()) {
@@ -127,14 +125,14 @@ public class ServerTaskManager {
                     datalogger.shutdown();
                 }
             } catch (Exception e) {
-                DBUtil.logError("app", "Shutting down datalogger for server {}: {}", serverId, e.getMessage());
+                LogUtil.logError(true, "app", "Shutting down datalogger for server {}: {}", serverId, e.getMessage());
             }
         }
 
         // 清空映射
         dataloggerInstances.clear();
 
-        DBUtil.logInfo("app", "All OPC UA monitoring tasks shut down complete.");
+        LogUtil.logInfo(true, "app", "All OPC UA monitoring tasks shut down complete.");
     }
 
     /**

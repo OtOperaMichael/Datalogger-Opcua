@@ -53,14 +53,14 @@ public class OpcUaNode {
      */
     private NodeId parseNodeId(String nodeIdStr) {
         if (nodeIdStr == null || nodeIdStr.trim().isEmpty()) {
-            LogUtil.logWarning(serverName, "NodeId string is null or empty");
+            LogUtil.logWarning(true,serverName, "NodeId string is null or empty");
             return null;
         }
         
         try {
             return NodeId.parse(nodeIdStr);
         } catch (Exception e) {
-            LogUtil.logError(serverName, "Invalid NodeId format: {}. Expected format: ns=<namespace>;s=<identifier> or ns=<namespace>;i=<numeric>", nodeIdStr);
+            LogUtil.logError(true,serverName, "Invalid NodeId format: {}. Expected format: ns=<namespace>;s=<identifier> or ns=<namespace>;i=<numeric>", nodeIdStr);
             return null;
         }
     }

@@ -93,8 +93,7 @@ public class SystemConfigUtil {
         File configFile = new File(FIlepathUtil.getSystemConfigPath());
         if (configFile.exists()) {
             if (configFile.delete()) {
-                LogUtil.logInfo("app","System config file deleted successfully");
-                DBUtil.logInfo("app", "System config file deleted");
+                LogUtil.logInfo(true, "app", "System config file deleted successfully");
 
                 // 重置实例和配置
                 synchronized (SystemConfigUtil.class) {
@@ -104,8 +103,7 @@ public class SystemConfigUtil {
                 }
                 return true;
             } else {
-                LogUtil.logError("app","Failed to delete system config file");
-                DBUtil.logError("app", "Failed to delete system config file");
+                LogUtil.logError(true, "app", "Failed to delete system config file");
             }
         }
         return true;
@@ -229,23 +227,21 @@ public class SystemConfigUtil {
         try (FileOutputStream fos = new FileOutputStream(configFile)) {
             props.store(fos, "System Configuration - Saved via Web UI");
 
-            LogUtil.logInfo("app","System config saved: adminPassword=" +
-                    maskPassword(this.adminPassword) +
-                    ", maxServerCount=" + this.maxServerCount +
-                    ", maxTableCount=" + this.maxTableCount +
-                    ", maxTableFieldCount=" + this.maxTableFieldCount +
-                    ", databaseRetenionDays=" + this.databaseRetentionDays + "days" +
-                    ", collectionThreads=" + this.dataCollectionThreads +
-                    ", saveThreads=" + this.dataSaveThreads +
-                    ", interval=" + this.dataSaveInterval + "s" +
-                    ", batchSize=" + this.dataSaveBatchSize +
-                    ", logLevel=" + this.logLevel);
-            DBUtil.logInfo("app", "System config saved to file");
+            LogUtil.logInfo(true, "app", "System config saved: adminPassword={}, maxServerCount={}, maxTableCount={}, maxTableFieldCount={}, databaseRetenionDays={}days, collectionThreads={}, saveThreads={}, interval={}s, batchSize={}, logLevel={}",
+                    maskPassword(this.adminPassword),
+                    this.maxServerCount,
+                    this.maxTableCount,
+                    this.maxTableFieldCount,
+                    this.databaseRetentionDays,
+                    this.dataCollectionThreads,
+                    this.dataSaveThreads,
+                    this.dataSaveInterval,
+                    this.dataSaveBatchSize,
+                    this.logLevel);
 
             return true;
         } catch (IOException e) {
-            e.printStackTrace();
-            DBUtil.logError("app", "Failed to save system config: " + e.getMessage());
+            LogUtil.logError(true, "app", "Failed to save system config: {}", e.getMessage());
             return false;
         }
     }
@@ -292,8 +288,7 @@ public class SystemConfigUtil {
 
                 // 只在第一次加载时输出日志
                 if (!configLogged) {
-                    String configLog = String.format(
-                            "System config loaded: adminPassword=%s, maxServerCount=%d, maxTableCount=%d, maxTableFieldCount=%d, databaseRetentionDays=%d, dataCollectionThreads=%d, dataSaveThreads=%d, dataSaveInterval=%ds, batchSize=%d, logLevel=%d",
+                    LogUtil.logInfo(true, "app", "System config loaded: adminPassword={}, maxServerCount={}, maxTableCount={}, maxTableFieldCount={}, databaseRetentionDays={}, dataCollectionThreads={}, dataSaveThreads={}, dataSaveInterval={}s, batchSize={}, logLevel={}",
                             maskPassword(this.adminPassword),
                             this.maxServerCount,
                             this.maxTableCount,
@@ -303,20 +298,17 @@ public class SystemConfigUtil {
                             this.dataSaveThreads,
                             this.dataSaveInterval,
                             this.dataSaveBatchSize,
-                            this.logLevel
-                    );
-                    LogUtil.logInfo("app",configLog);
-                    DBUtil.logInfo("app", configLog);
+                            this.logLevel);
+
                     configLogged = true;
                 }
 
             } catch (IOException e) {
-                e.printStackTrace();
-                LogUtil.logError("app","Failed to load config, using defaults");
+                LogUtil.logError(true, "app", "Failed to load config, using defaults");
                 setDefaultConfig();
             }
         } else {
-            LogUtil.logWarning("app","System config file not found, using default config");
+            LogUtil.logWarning(true, "app", "System config file not found, using default config");
             setDefaultConfig();
         }
     }

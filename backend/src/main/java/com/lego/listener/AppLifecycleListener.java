@@ -28,7 +28,7 @@ public class AppLifecycleListener implements ServletContextListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
-        LogUtil.logInfo("app", "Application starting...");
+        LogUtil.logInfo(true,"app", "Application starting...");
 
         // 初始化数据库
         if (DBUtil.init()) {
@@ -45,17 +45,16 @@ public class AppLifecycleListener implements ServletContextListener {
                 }
             }
 
-            LogUtil.logInfo("app", "Application started.");
-            DBUtil.logInfo("app", "Application started.");
+            LogUtil.logInfo(true, "app", "Application started.");
             return;
         }
         
-        LogUtil.logWarning("app", "Application started, but failed to initialize database.");
+        LogUtil.logWarning(true, "app", "Application started, but failed to initialize database.");
     }
 
     @Override
     public void contextDestroyed(ServletContextEvent sce) {
-        LogUtil.logInfo("app", "Application shutting down...");
+        LogUtil.logInfo(true,"app", "Application shutting down...");
 
         // 1. 关闭数据源（如果是 Druid）
         DBUtil.close();
@@ -72,11 +71,10 @@ public class AppLifecycleListener implements ServletContextListener {
             Method method = clazz.getMethod("shutdown");
             method.invoke(null);
         } catch (Exception e) {
-            LogUtil.logError("app", "Failed to shutdown MySQL cleanup thread: {}", e.getMessage());
-            DBUtil.logInfo("app", "Failed to shutdown MySQL cleanup thread: {}", e.getMessage());
+            LogUtil.logError(true, "app", "Failed to shutdown MySQL cleanup thread: {}", e.getMessage());
         }
 
-        LogUtil.logInfo("app", "Application shut down.");
-        DBUtil.logInfo("app", "Application shut down.");
+        LogUtil.logInfo(true,"app", "Application shut down.");
+
     }
 }

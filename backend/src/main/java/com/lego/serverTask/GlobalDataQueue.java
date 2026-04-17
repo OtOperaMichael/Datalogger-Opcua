@@ -75,8 +75,7 @@ public class GlobalDataQueue {
         // 启动定时监控任务
         startMonitoring();
 
-        DBUtil.logInfo("app", "Global data queue initialized with capacity: {}", QUEUE_CAPACITY);
-        LogUtil.logInfo("app", "Global data queue initialized with capacity: {}", QUEUE_CAPACITY);
+        LogUtil.logInfo(true, "app", "Global data queue initialized with capacity: {}", QUEUE_CAPACITY);
     }
 
     public static GlobalDataQueue getInstance() {
@@ -114,17 +113,13 @@ public class GlobalDataQueue {
 
             if (!success) {
                 // 队列已满
-                DBUtil.logWarning("app", "Global data queue is full! Server: {}, Queue size: {}", 
-                    serverName, dataQueue.size());
-                LogUtil.logWarning("app", "Global data queue is full! Server: {}, Queue size: {}", 
+                LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}", 
                     serverName, dataQueue.size());
             }
 
             return success;
         } catch (Exception e) {
-            DBUtil.logError("app", "Failed to enqueue OPC UA data for server {}: {}", 
-                serverName, e.getMessage());
-            LogUtil.logError("app", "Failed to enqueue OPC UA data for server {}: {}", 
+            LogUtil.logError(true, "app", "Failed to enqueue OPC UA data for server {}: {}", 
                 serverName, e.getMessage());
             e.printStackTrace();
             return false;
@@ -154,7 +149,7 @@ public class GlobalDataQueue {
                                 usagePercent * 100,
                                 getProcessingCount()
                         );
-                        DBUtil.logInfo("app", logMessage);
+                        LogUtil.logInfo(true, "app", logMessage);
                     }
 
                     // 每 2 次(20s)打印一次线程状态
@@ -162,27 +157,22 @@ public class GlobalDataQueue {
                         // 每10秒打印线程状态
                         // 每隔 6 次打印一次线程状态
                         String threadStatus = ThreadDiagnosticUtil.getThreadStatus(true).toString();
-                        LogUtil.logDebugL2("app", "{}", threadStatus);
-                        DBUtil.logDebugL2("app", "{}", threadStatus);
+                        LogUtil.logDebugL2(true, "app", "{}", threadStatus);
                     }
 
                 } else {
                     // 过载时立即写入告警日志（每次都写）
-                    DBUtil.logWarning("app", "WARNING: Queue usage high! Total: {}, Current: {}, Usage: {:.2f}%, Processed: {}", 
-                        QUEUE_CAPACITY, currentSize, usagePercent * 100, getProcessingCount());
-                    LogUtil.logWarning("app", "WARNING: Queue usage high! Total: {}, Current: {}, Usage: {:.2f}%, Processed: {}", 
+                    LogUtil.logWarning(true, "app", "WARNING: Queue usage high! Total: {}, Current: {}, Usage: {:.2f}%, Processed: {}", 
                         QUEUE_CAPACITY, currentSize, usagePercent * 100, getProcessingCount());
                 }
 
             } catch (Exception e) {
-                DBUtil.logError("app", "Error in queue monitoring: {}", e.getMessage());
-                LogUtil.logError("app", "Error in queue monitoring: {}", e.getMessage());
+                LogUtil.logError(true, "app", "Error in queue monitoring: {}", e.getMessage());
                 e.printStackTrace();
             }
         }, MONITOR_INTERVAL_SECONDS, MONITOR_INTERVAL_SECONDS, TimeUnit.SECONDS);
 
-        DBUtil.logInfo("app", "Queue monitoring started with interval: {}s", MONITOR_INTERVAL_SECONDS);
-        LogUtil.logInfo("app", "Queue monitoring started with interval: {}s", MONITOR_INTERVAL_SECONDS);
+        LogUtil.logInfo(true, "app", "Queue monitoring started with interval: {}s", MONITOR_INTERVAL_SECONDS);
     }
 
     /**
@@ -222,8 +212,7 @@ public class GlobalDataQueue {
      * 关闭队列和消费者线程池
      */
     public void shutdown() {
-        LogUtil.logInfo("app", "Shutting down global data queue...");
-        DBUtil.logInfo("app", "Shutting down global data queue...");
+        LogUtil.logInfo(true, "app", "Shutting down global data queue...");
 
         // 先停止监控线程
         if (monitorScheduler != null) {
@@ -243,8 +232,7 @@ public class GlobalDataQueue {
             consumerPool.stop();
         }
 
-        LogUtil.logInfo("app", "Global data queue shut down complete. Remaining items: {}", dataQueue.size());
-        DBUtil.logInfo("app", "Global data queue shut down complete. Remaining items: {}", dataQueue.size());
+        LogUtil.logInfo(true, "app", "Global data queue shut down complete. Remaining items: {}", dataQueue.size());
     }
 
 

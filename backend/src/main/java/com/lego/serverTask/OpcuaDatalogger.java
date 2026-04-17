@@ -8,6 +8,7 @@ import com.lego.pojo.template.Template;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
 import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 import com.lego.util.DBUtil;
+import com.lego.util.LogUtil;
 import com.lego.util.TemplateUtil;
 import lombok.Getter;
 import org.eclipse.milo.opcua.sdk.client.DiscoveryClient;
@@ -72,7 +73,7 @@ public class OpcuaDatalogger {
         globalDataQueue = GlobalDataQueue.getInstance();
 
         if (template == null) {
-            DBUtil.logWarning(serverName, "Template not found for server: " + serverName);
+            LogUtil.logWarning(true, serverName, "Template not found for server: {}", serverName);
             customModuleIsEnabled = false;
             alarmModuleIsEnabled = false;
             communicationModuleIsEnabled = false;
@@ -132,7 +133,7 @@ public class OpcuaDatalogger {
 
         // 检查是否已经在运行
         if (isRunning) {
-            DBUtil.logWarning(serverName, "Server {} is already running, skipping start", serverName);
+            LogUtil.logWarning(true, serverName, "Server {} is already running, skipping start", serverName);
             return;
         }
 
@@ -145,7 +146,7 @@ public class OpcuaDatalogger {
                     .orElse(null);
 
             if (endpoint == null) {
-                DBUtil.logError(serverName, "No endpoint with SecurityPolicy.None found for server: {}", serverUrl);
+                LogUtil.logError(true, serverName, "No endpoint with SecurityPolicy.None found for server: {}", serverUrl);
                 return;
             }
 
@@ -155,7 +156,7 @@ public class OpcuaDatalogger {
 
             // 连接
             client.connect();
-            DBUtil.logInfo(serverName, "Connected to OPC UA Server: {}", serverUrl);
+            LogUtil.logInfo(true, serverName, "Connected to OPC UA Server: {}", serverUrl);
 
             // 创建订阅
             if (customModuleIsEnabled) {
@@ -165,12 +166,12 @@ public class OpcuaDatalogger {
             }
 
             isRunning = true;
-            DBUtil.logInfo(serverName, "Server {} started successfully", serverName);
+            LogUtil.logInfo(true, serverName, "Server {} started successfully", serverName);
 
         } catch (Exception e) {
             isRunning = false;
             // 启动失败，记录日志并抛出异常
-            DBUtil.logInfo(serverName, "Failed to start server: {}", e.getMessage());
+            LogUtil.logError(true, serverName, "Failed to start server: {}", e.getMessage());
            e.printStackTrace();
         }
     }
@@ -183,35 +184,35 @@ public class OpcuaDatalogger {
     public void shutdown() {
         // 如果未运行，无需关闭
         if (!isRunning) {
-            DBUtil.logWarning(serverName, "Server {} is not running, skipping shutdown", serverName);
+            LogUtil.logWarning(true, serverName, "Server {} is not running, skipping shutdown", serverName);
             return;
         }
 
-        DBUtil.logInfo(serverName, "Starting shutdown process for server: {}", serverName);
+        LogUtil.logInfo(true, serverName, "Starting shutdown process for server: {}", serverName);
         isRunning = false;
 
         // 1. 删除所有 subscription
         if (!subscriptionMap.isEmpty()) {
-            DBUtil.logInfo(serverName, "Deleting {} subscriptions...", subscriptionMap.size());
+            LogUtil.logInfo(true, serverName, "Deleting {} subscriptions...", subscriptionMap.size());
             for (Map.Entry<String, OpcUaSubscription> entry : subscriptionMap.entrySet()) {
                 try {
                     entry.getValue().delete();
-                    DBUtil.logInfo(serverName, "Deleted subscription for nodeGroup: {}", entry.getKey());
+                    LogUtil.logInfo(true, serverName, "Deleted subscription for nodeGroup: {}", entry.getKey());
                 } catch (Exception e) {
-                    DBUtil.logError(serverName, "Deleting subscription for {}: {}", entry.getKey(), e.getMessage());
+                    LogUtil.logError(true, serverName, "Deleting subscription for {}: {}", entry.getKey(), e.getMessage());
                 }
             }
             subscriptionMap.clear();
-            DBUtil.logInfo(serverName, "All subscriptions deleted and map cleared");
+            LogUtil.logInfo(true, serverName, "All subscriptions deleted and map cleared");
         }
 
         // 2. 断开 OPC UA 客户端连接
         if (client != null) {
             try {
                 client.disconnect();
-                DBUtil.logInfo(serverName, "OPC UA client disconnected successfully");
+                LogUtil.logInfo(true, serverName, "OPC UA client disconnected successfully");
             } catch (Exception e) {
-                DBUtil.logError(serverName, "Disconnecting OPC UA client: {}", e.getMessage());
+                LogUtil.logError(true, serverName, "Disconnecting OPC UA client: {}", e.getMessage());
             }
         }
 
@@ -219,10 +220,10 @@ public class OpcuaDatalogger {
         if (!customModuleNodeGroupList.isEmpty()) {
             int size = customModuleNodeGroupList.size();
             customModuleNodeGroupList.clear();
-            DBUtil.logInfo(serverName, "Cleared {} node groups from local cache", size);
+            LogUtil.logInfo(true, serverName, "Cleared {} node groups from local cache", size);
         }
 
-        DBUtil.logInfo(serverName, "Shutdown process completed for server: {}", serverName);
+        LogUtil.logInfo(true, serverName, "Shutdown process completed for server: {}", serverName);
     }
 
     /**
@@ -234,7 +235,7 @@ public class OpcuaDatalogger {
     private void createSubscriptionForNodeGroup(OpcUaClient client, OpcUaNodeGroup nodeGroup) throws Exception {
         String groupName = nodeGroup.getName();
         Integer sampleInterval = nodeGroup.getSampleInterval();
-        DBUtil.logInfo(serverName, "Creating subscription for nodeGroup: {}" + groupName);
+        LogUtil.logInfo(true, serverName, "Creating subscription for nodeGroup: {}", groupName);
 
         // 创建订阅
         OpcUaSubscription subscription = new OpcUaSubscription(client);
@@ -258,7 +259,7 @@ public class OpcuaDatalogger {
             OpcUaNode node = nodeGroup.getNodeList().get(0);
             OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
             monitoredItem.setSamplingInterval(sampleInterval);
-            DBUtil.logInfo(serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
+            LogUtil.logInfo(true, serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
 
         } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
             // 为 SCALAR 类型的每个节点创建监控项
@@ -268,18 +269,18 @@ public class OpcuaDatalogger {
 
                 // 添加监控项到该 nodeGroup 的订阅
                 subscription.addMonitoredItem(monitoredItem);
-                DBUtil.logInfo(serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
+                LogUtil.logInfo(true, serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
             }
         }
 
         // 同步监控项到服务器
         try {
             subscription.synchronizeMonitoredItems();
-            DBUtil.logInfo(serverName, "Successfully synchronized monitored items for nodeGroup: {}", groupName);
+            LogUtil.logInfo(true, serverName, "Successfully synchronized monitored items for nodeGroup: {}", groupName);
         } catch (MonitoredItemSynchronizationException e) {
-            DBUtil.logError(serverName, "Failed to synchronize monitored items for nodeGroup: {}", groupName, e);
+            LogUtil.logError(true, serverName, "Failed to synchronize monitored items for nodeGroup: {}", groupName, e);
             e.getCreateResults().forEach(result ->
-                    DBUtil.logError(serverName, "Failed to create item: nodeId={}, serviceResult={}, operationResult={}",
+                    LogUtil.logError(true, serverName, "Failed to create item: nodeId={}, serviceResult={}, operationResult={}",
                             result.monitoredItem().getReadValueId().getNodeId(),
                             result.serviceResult(),
                             result.operationResult())
@@ -288,7 +289,7 @@ public class OpcuaDatalogger {
 
         // 将 subscription 保存到 map 中，方便后续管理
         subscriptionMap.put(groupName, subscription);
-        DBUtil.logInfo(serverName, "Subscription created successfully for nodeGroup: {}", groupName);
+        LogUtil.logInfo(true, serverName, "Subscription created successfully for nodeGroup: {}", groupName);
     }
 
     /**
@@ -305,12 +306,12 @@ public class OpcuaDatalogger {
         try {
             // 参数验证
             if (items == null || values == null || items.isEmpty() || values.isEmpty()) {
-                DBUtil.logWarning(serverName, "Received empty data for nodeGroup: {}", nodeGroup.getName());
+                LogUtil.logWarning(true, serverName, "Received empty data for nodeGroup: {}", nodeGroup.getName());
                 return;
             }
 
             if (items.size() != values.size()) {
-                DBUtil.logWarning(serverName, "Items and values size mismatch for nodeGroup: {}", nodeGroup.getName());
+                LogUtil.logWarning(true, serverName, "Items and values size mismatch for nodeGroup: {}", nodeGroup.getName());
                 return;
             }
 
@@ -331,7 +332,7 @@ public class OpcuaDatalogger {
                 // 检查是否有节点值为 null
                 for (OpcUaNode node : nodeGroup.getNodeList()) {
                     if (node.getNewValue() == null) {
-                        DBUtil.logWarning(serverName, "Node {} in group {} has no value yet",
+                        LogUtil.logWarning(true, serverName, "Node {} in group {} has no value yet",
                                 node.getName(), groupName);
                     }
                 }
@@ -340,15 +341,15 @@ public class OpcuaDatalogger {
                 boolean success = globalDataQueue.enqueueCustomData(serverName, nodeGroup);
 
                 if (success) {
-                    DBUtil.logInfo(serverName, "Data enqueued successfully for nodeGroup: {}, nodes count: {}",
+                    LogUtil.logInfo(true, serverName, "Data enqueued successfully for nodeGroup: {}, nodes count: {}",
                             groupName, nodeGroup.getNodeList().size());
                 } else {
-                    DBUtil.logWarning(serverName, "Failed to enqueue data for nodeGroup: {} - queue may be full", groupName);
+                    LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {} - queue may be full", groupName);
                 }
             }
 
         } catch (Exception e) {
-            DBUtil.logError(serverName, "Error handling data change for nodeGroup {}: {}",
+            LogUtil.logError(true, serverName, "Error handling data change for nodeGroup {}: {}",
                     nodeGroup.getName(), e.getMessage());
             e.printStackTrace();
         }
@@ -384,7 +385,7 @@ public class OpcuaDatalogger {
                     matchingNode.updateValue(value);
                     hasChanges = true;
 
-                    DBUtil.logDebugL1(serverName, "Node {} updated: {} -> {}",
+                    LogUtil.logDebugL1(true, serverName, "Node {} updated: {} -> {}",
                             matchingNode.getName(), matchingNode.getOldValue(), matchingNode.getNewValue());
 
                 }
@@ -406,13 +407,13 @@ public class OpcuaDatalogger {
     private boolean handleArrayData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
         // ARRAY 类型应该只有一个监控项（订阅的第一个节点）
         if (items.size() != 1 || values.size() != 1) {
-            DBUtil.logWarning(serverName, "ARRAY nodeGroup should have only 1 monitored item, but got {}", items.size());
+            LogUtil.logWarning(true, serverName, "ARRAY nodeGroup should have only 1 monitored item, but got {}", items.size());
             return false;
         }
 
         DataValue dataValue = values.get(0);
         if (dataValue.getValue() == null) {
-            DBUtil.logWarning(serverName, "Received null value for ARRAY nodeGroup: {}", nodeGroup.getName());
+            LogUtil.logWarning(true, serverName, "Received null value for ARRAY nodeGroup: {}", nodeGroup.getName());
             return false;
         }
 
@@ -420,7 +421,7 @@ public class OpcuaDatalogger {
 
         // 检查是否为数组类型
         if (arrayValue == null || !arrayValue.getClass().isArray()) {
-            DBUtil.logWarning(serverName, "Expected array value for ARRAY nodeGroup {}, but got: {}",
+            LogUtil.logWarning(true, serverName, "Expected array value for ARRAY nodeGroup {}, but got: {}",
                     nodeGroup.getName(), arrayValue != null ? arrayValue.getClass().getName() : "null");
             return false;
         }
@@ -430,7 +431,7 @@ public class OpcuaDatalogger {
 
         // 检查数组长度是否与节点数量匹配
         if (arrayLength != nodeList.size()) {
-            DBUtil.logWarning(serverName, "Array length ({}) does not match node count ({}) for nodeGroup: {}",
+            LogUtil.logWarning(true, serverName, "Array length ({}) does not match node count ({}) for nodeGroup: {}",
                     arrayLength, nodeList.size(), nodeGroup.getName());
         }
 
@@ -451,13 +452,13 @@ public class OpcuaDatalogger {
                 node.updateValue(elementValue);
                 hasChanges = true;
 
-                DBUtil.logDebugL1(serverName, "Node [{}] updated from array[{}]: {} -> {}",
+                LogUtil.logDebugL1(true, serverName, "Node [{}] updated from array[{}]: {} -> {}",
                         node.getName(), i, node.getOldValue(), node.getNewValue());
 
             }
         }
 
-        DBUtil.logDebugL1(serverName, "ARRAY nodeGroup {} processed: {} elements from array of length {}",
+        LogUtil.logDebugL1(true, serverName, "ARRAY nodeGroup {} processed: {} elements from array of length {}",
                 nodeGroup.getName(), nodeList.size(), arrayLength);
 
         return hasChanges;
