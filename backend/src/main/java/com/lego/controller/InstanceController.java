@@ -8,6 +8,8 @@ import com.lego.common.Result;
 import com.lego.common.ResultCodeEnum;
 import com.lego.pojo.QueryLoad;
 import com.lego.pojo.Server;
+import com.lego.pojo.template.BaseModule;
+import com.lego.pojo.template.ModuleType;
 import com.lego.pojo.template.custom.Table;
 import com.lego.pojo.template.Template;
 import com.lego.service.Impl.InstanceServiceImpl;
@@ -38,15 +40,17 @@ import java.util.Map;
 public class InstanceController extends BaseController {
     private final InstanceService instanceService = new InstanceServiceImpl();
     private final ServerService serverService = ServerServiceImpl.getInstance();
+    
     protected void query(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         //获取参数
         QueryLoad queryLoad = WebUtil.readJson(req, QueryLoad.class);
+        
         // 参数校验
         if (queryLoad.getServerName() == null || queryLoad.getServerName().trim().isEmpty()) {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
             return;
         }
-        if (queryLoad.getModuleName() == null || queryLoad.getModuleName().trim().isEmpty()) {
+        if (queryLoad.getModuleType() == null) {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
             return;
         }
@@ -60,7 +64,6 @@ public class InstanceController extends BaseController {
         }
 
         // 解析时间
-        // 确保使用系统默认时区（中国时区）
         ZoneId zoneId = ZoneId.systemDefault();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         LocalDateTime startTime = LocalDateTime.parse(queryLoad.getStartTime(), formatter);
@@ -86,25 +89,9 @@ public class InstanceController extends BaseController {
             return;
         }
 
-        // 根据 moduleName 获取对应的模块
-        com.lego.pojo.template.custom.CustomModule module = null;
-        String moduleName = queryLoad.getModuleName();
+        // 根据 ModuleType 获取对应的模块
+        BaseModule<?> module = template.getModuleByType(queryLoad.getModuleType());
         
-        switch (moduleName.toLowerCase()) {
-            case "custom":
-                module = template.getCustom();
-                break;
-            case "alarm":
-                module = template.getAlarm();
-                break;
-            case "communication":
-                module = template.getCommunication();
-                break;
-            default:
-                WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
-                return;
-        }
-
         // 检查模块是否存在且已启用
         if (module == null || !module.isEnable()) {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
@@ -112,10 +99,7 @@ public class InstanceController extends BaseController {
         }
 
         // 在对应模块的 tablelist 中查找表信息
-        Table table = module.getTablelist().stream()
-                .filter(t -> queryLoad.getTableName().equals(t.getName()))
-                .findFirst()
-                .orElse(null);
+        Table table = findTableInModule(module, queryLoad.getTableName());
 
         if (table == null) {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
@@ -123,15 +107,40 @@ public class InstanceController extends BaseController {
         }
         
         //调用 service查询
-        List<Map<String, Object>> results =  instanceService.query(queryLoad);
+        List<Map<String, Object>> results = instanceService.query(queryLoad);
+        
         //返回结果
-        // 构造响应
         Map<String, Object> data = new HashMap<>();
         data.put("results", results);
         data.put("count", results.size());
 
         WebUtil.writeJson(resp, Result.ok(data));
+    }
 
+    /**
+     * 在模块中查找指定名称的表格（支持不同类型的 Table）
+     *
+     * @param module    模块对象
+     * @param tableName 表格名称
+     * @return 找到的表格，未找到返回 null
+     */
+    @SuppressWarnings("unchecked")
+    private Table findTableInModule(BaseModule<?> module, String tableName) {
+        if (module == null || module.getTablelist() == null) {
+            return null;
+        }
+
+        // 遍历表格列表，查找匹配的表格
+        for (Object obj : module.getTablelist()) {
+            if (obj instanceof Table) {
+                Table table = (Table) obj;
+                if (tableName.equals(table.getName())) {
+                    return table;
+                }
+            }
+        }
+        
+        return null;
     }
 
     protected void queryLogs(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {

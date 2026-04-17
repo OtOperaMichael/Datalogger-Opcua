@@ -5,6 +5,13 @@
  * 3. comm module
  * 4. xxx module
  */
+enum ModuleType {
+  CUSTOM,
+  ALARM,
+  COMMUNICATION,
+
+}
+
 
 //1. custom module
 
@@ -54,6 +61,7 @@ interface TemplateInterface {
 }
 
 export {
+  ModuleType,
   NodeGroupType,
   DataType,
   type CustomNodeInterface,

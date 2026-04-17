@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {useSelectedServerStore} from "@/stores/useSelectedServerStore.ts";
 import {useTemplateListStore} from "@/stores/useTemplateListStore.ts";
-import type {TemplateInterface, CustomTableInterface, CustomModuleInterface} from "@/types/template.ts";
+import type {TemplateInterface, CustomTableInterface, CustomModuleInterface, ModuleType} from "@/types/template.ts";
 import {ref, computed, watch} from 'vue';
 import {message} from 'ant-design-vue';
 import request from "@/utils/request.ts";
@@ -18,10 +18,17 @@ const template = computed(() => {
   return templateListStore.getTemplateByName(serverStore.templateName);
 });
 
+// Module name mapping (string to enum and display label)
+const moduleConfig = [
+  { value: 'custom', label: 'Custom Module', key: 'custom' as keyof TemplateInterface },
+  { value: 'alarm', label: 'Alarm Module', key: 'alarm' as keyof TemplateInterface },
+  { value: 'communication', label: 'Communication Module', key: 'communication' as keyof TemplateInterface }
+];
+
 // Query form state
 const queryForm = ref({
-  selectedModule: '' as 'custom' | 'alarm' | 'communication' | '',
-  selectedTable: '',
+  selectedModule: '' as string,
+  selectedTable: ''as string,
   startTime: null as Date | null,
   endTime: null as Date | null
 });
@@ -35,25 +42,23 @@ const exporting = ref(false);
 const availableModules = computed(() => {
   if (!template.value) return [];
 
-  const modules = [];
-  if (template.value.custom?.enable) {
-    modules.push({ value: 'custom', label: 'Custom Module' });
-  }
-  if (template.value.alarm?.enable) {
-    modules.push({ value: 'alarm', label: 'Alarm Module' });
-  }
-  if (template.value.communication?.enable) {
-    modules.push({ value: 'communication', label: 'Communication Module' });
-  }
-
-  return modules;
+  return moduleConfig.filter(config => {
+    const module = template.value?.[config.key] as CustomModuleInterface | undefined;
+    return module?.enable;
+  }).map(config => ({
+    value: config.value,
+    label: config.label
+  }));
 });
 
 // Computed property for available tables in selected module
 const availableTables = computed(() => {
   if (!template.value || !queryForm.value.selectedModule) return [];
 
-  const module = template.value[queryForm.value.selectedModule as keyof TemplateInterface] as CustomModuleInterface;
+  const config = moduleConfig.find(c => c.value === queryForm.value.selectedModule);
+  if (!config) return [];
+
+  const module = template.value?.[config.key] as CustomModuleInterface | undefined;
   if (!module?.tableList) return [];
 
   return module.tableList.filter((table: CustomTableInterface) => table.name && table.name.trim() !== '');

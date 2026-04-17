@@ -1,5 +1,6 @@
 package com.lego.serverTask;
 
+import com.lego.pojo.template.ModuleType;
 import com.lego.pojo.template.custom.NodeGroupType;
 import com.lego.pojo.template.custom.Table;
 import com.lego.pojo.Server;
@@ -105,7 +106,7 @@ public class OpcuaDatalogger {
                 Table table = template.getCustom().getTablelist().get(index);
                 //从前端传来的tagGroup有可能为空，为空则跳过
                 if (!table.getName().isEmpty()) {
-                    OpcUaNodeGroup nodeGroup = new OpcUaNodeGroup(serverName, table);
+                    OpcUaNodeGroup nodeGroup = new OpcUaNodeGroup(serverName, ModuleType.Custom, table);
                     customModuleNodeGroupList.add(nodeGroup);
                     //create hyper table for each tagGroup
                     DBUtil.createHyperTable(serverName, nodeGroup);

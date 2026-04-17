@@ -1,5 +1,6 @@
 package com.lego.serverTask.protocols.opcua;
 
+import com.lego.pojo.template.ModuleType;
 import com.lego.pojo.template.custom.Node;
 import com.lego.pojo.template.custom.NodeGroupType;
 import com.lego.pojo.template.custom.Table;
@@ -17,6 +18,10 @@ public class OpcUaNodeGroup {
     // server name
     @Getter
     private String serverName;
+
+    // module type: custom, alarm, communication
+    @Getter
+    private ModuleType moduleType;
 
     // table name
     @Getter
@@ -37,9 +42,10 @@ public class OpcUaNodeGroup {
     // nodeId 到 OpcUaNode 的映射，用于快速查找
     private Map<NodeId, OpcUaNode> nodeIdToNodeMap;
 
-    public OpcUaNodeGroup(String serverName, Table table) {
+    public OpcUaNodeGroup(String serverName, ModuleType moduleType, Table table) {
 
         this.serverName = serverName;
+        this.moduleType = moduleType;
         this.name = table.getName();
         this.sampleInterval = table.getSampleInterval();
         this.nodeType = table.getNodeGroupType();

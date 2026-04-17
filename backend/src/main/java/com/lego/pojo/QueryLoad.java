@@ -1,5 +1,6 @@
 package com.lego.pojo;
 
+import com.lego.pojo.template.ModuleType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -19,7 +20,7 @@ import lombok.NoArgsConstructor;
 @Data
 public class QueryLoad {
     private String serverName;
-    private String moduleName;
+    private ModuleType moduleType;
     private String tableName;
     private String startTime;
     private String endTime;

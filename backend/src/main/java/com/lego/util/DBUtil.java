@@ -105,7 +105,7 @@ public class DBUtil {
                 }
                 dataSource = null;
             }
-            
+
             LogUtil.logError("app", "Failed to initialize TimescaleDB connection pool: {}", e.getMessage());
         }
         return false;
@@ -190,7 +190,7 @@ public class DBUtil {
      */
     public static void createTable(String schemaName, OpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
-        String safeTableName = sanitizeIdentifier(nodeGroup.getName());
+        String safeTableName = sanitizeIdentifier(nodeGroup.getModuleType().toString().toLowerCase() + "_" + nodeGroup.getName());
         String fullTableName = safeDbName + "." + safeTableName;
 
         StringBuilder columns = new StringBuilder();
@@ -226,7 +226,7 @@ public class DBUtil {
      */
     public static void createHyperTable(String schemaName, OpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
-        String safeTableName = sanitizeIdentifier(nodeGroup.getName());
+        String safeTableName = sanitizeIdentifier(nodeGroup.getModuleType().toString().toLowerCase() + "_" + nodeGroup.getName());
         String fullTableName = safeDbName + "." + safeTableName;
 
         StringBuilder columns = new StringBuilder();
@@ -710,7 +710,7 @@ public class DBUtil {
 
     private static String sanitizeIdentifier(String name) {
         if (name == null || !name.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-            throw new IllegalArgumentException("Invalid identifier: " + name);
+            LogUtil.logWarning("app", "Invalid identifier: " + name);
         }
         // PostgreSQL 使用双引号包裹标识符
         return "\"" + name + "\"";

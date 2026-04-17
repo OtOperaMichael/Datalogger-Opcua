@@ -1,4 +1,4 @@
-package com.lego.pojo.template.custom;
+package com.lego.pojo.template.communication;
 
 import com.lego.pojo.template.BaseModule;
 import lombok.AllArgsConstructor;
@@ -20,7 +20,7 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class CustomModule implements BaseModule<Table> {
+public class CommModule implements BaseModule<Table> {
 
     private boolean enable;
     private List<Table> tablelist;

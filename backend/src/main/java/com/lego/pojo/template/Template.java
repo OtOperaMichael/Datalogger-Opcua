@@ -1,12 +1,11 @@
 package com.lego.pojo.template;
 
+import com.lego.pojo.template.alarm.AlarmModule;
+import com.lego.pojo.template.communication.CommModule;
 import com.lego.pojo.template.custom.CustomModule;
-import com.lego.pojo.template.custom.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.List;
 
 /**
  * ClassName: Template
@@ -27,7 +26,24 @@ public class Template {
     private String port;
     private String postfix;
     private CustomModule custom;
-    private CustomModule alarm;
-    private CustomModule communication;
+    private AlarmModule alarm;
+    private CommModule communication;
 
+    /**
+     * 根据模块类型获取对应的模块
+     *
+     * @param moduleType 模块类型
+     * @return 对应的模块，如果类型无效则返回 null
+     */
+    public BaseModule<?> getModuleByType(ModuleType moduleType) {
+        if (moduleType == null) {
+            return null;
+        }
+
+        return switch (moduleType) {
+            case Custom -> custom;
+            case Alarm -> alarm;
+            case Communication -> communication;
+        };
+    }
 }

@@ -23,8 +23,10 @@ public class InstanceServiceImpl implements InstanceService {
 
     @Override
     public List<Map<String, Object>> query(QueryLoad queryLoad) {
-        List<Map<String, Object>> results =new ArrayList<>();
-            results = instanceDao.queryFromDatabase(queryLoad.getServerName(), queryLoad.getTableName(), queryLoad.getStartTime(), queryLoad.getEndTime());
+        List<Map<String, Object>> results = new ArrayList<>();
+        //tableName == moduleType + "_" + tableName, e.g. custom_group1, to avoid duplicate name across modules
+        String tableName = queryLoad.getModuleType().toString().toLowerCase() + "_" + queryLoad.getTableName();
+        results = instanceDao.queryFromDatabase(queryLoad.getServerName(), tableName, queryLoad.getStartTime(), queryLoad.getEndTime());
         return results;
     }
 
