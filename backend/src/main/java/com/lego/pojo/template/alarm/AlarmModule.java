@@ -23,6 +23,6 @@ import java.util.List;
 public class AlarmModule implements BaseModule<Table> {
 
     private boolean enable;
-    private List<Table> tablelist;
+    private List<Table> tableList;
 
 }

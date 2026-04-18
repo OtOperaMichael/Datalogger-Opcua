@@ -24,6 +24,6 @@ public interface BaseModule<T> {
      * 获取模块中的表格列表
      * @return list of tables
      */
-    List<T> getTablelist();
+    List<T> getTableList();
 
 }

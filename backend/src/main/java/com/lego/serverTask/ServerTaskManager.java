@@ -1,28 +1,27 @@
 package com.lego.serverTask;
 
 import com.lego.pojo.Server;
-import com.lego.util.DBUtil;
 import com.lego.util.LogUtil;
-import com.lego.util.TemplateUtil;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-/**
- * ClassName: ServerTaskManager
- * Package: lego.serverTask
- * Description: OPC UA 服务器任务管理器（纯异步模式）
- *
- * @Author michael.zhu
- * @Create 2026/2/10 19:28
- * @Version 1.0
- */
 public class ServerTaskManager {
 
     private static volatile ServerTaskManager instance;
 
     // serverId -> Datalogger instance
     private final Map<String, OpcuaDatalogger> dataloggerInstances = new ConcurrentHashMap<>();
+
+    // 线程池 处理server 启动和停止
+    private final ExecutorService taskExecutor = Executors.newCachedThreadPool(r -> {
+        Thread thread = new Thread(r);
+        thread.setName("OPC-UA-StartStop-" + thread.getId());
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private ServerTaskManager() {
     }
@@ -59,30 +58,26 @@ public class ServerTaskManager {
             dataloggerInstances.remove(id);
         }
 
-        try {
-            // 创建 datalogger 实例
-            OpcuaDatalogger datalogger = new OpcuaDatalogger(server);
+        OpcuaDatalogger datalogger = new OpcuaDatalogger(server);
+        dataloggerInstances.put(id, datalogger);
 
-            // 保存实例引用
-            dataloggerInstances.put(id, datalogger);
+        taskExecutor.submit(() -> {
+            try {
+                datalogger.start();
 
-            // 启动 datalogger
-            datalogger.start();
-
-            // 检查是否启动成功
-            if (datalogger.isRunning()) {
-                LogUtil.logInfo(true, server.getName(), "Started monitoring task for server: {}", id);
-            } else {
-                // 启动失败，清理
+                if (datalogger.isRunning()) {
+                    LogUtil.logInfo(true, server.getName(), "Started monitoring task for server: {}", id);
+                } else {
+                    dataloggerInstances.remove(id);
+                    LogUtil.logWarning(true, server.getName(), "Failed to start monitoring task for server: {}", id);
+                }
+            } catch (Exception e) {
                 dataloggerInstances.remove(id);
-                LogUtil.logWarning(true, server.getName(), "Failed to start monitoring task for server: {}", id);
+                LogUtil.logError(true, server.getName(), "Error starting monitoring task for server {}: {}", id, e.getMessage());
             }
+        });
 
-        } catch (Exception e) {
-            // 启动异常，清理资源
-            dataloggerInstances.remove(id);
-            LogUtil.logError(true, server.getName(), "Error starting monitoring task for server {}: {}", id, e.getMessage());
-        }
+        LogUtil.logInfo(true, server.getName(), "Start request submitted for server: {} (async)", id);
     }
 
     /**
@@ -93,17 +88,19 @@ public class ServerTaskManager {
     public void stopMonitoring(Server server) {
         String id = server.getId();
         
-        // 移除并获取 datalogger 实例
         OpcuaDatalogger datalogger = dataloggerInstances.remove(id);
         
         if (datalogger != null) {
-            try {
-                // 调用 shutdown 清理资源
-                datalogger.shutdown();
-                LogUtil.logInfo(true, server.getName(), "Stopped monitoring task for server: {}", id);
-            } catch (Exception e) {
-                LogUtil.logError(true, server.getName(), "Stopping monitoring task for server {}: {}", id, e.getMessage());
-            }
+            taskExecutor.submit(() -> {
+                try {
+                    datalogger.shutdown();
+                    LogUtil.logInfo(true, server.getName(), "Stopped monitoring task for server: {}", id);
+                } catch (Exception e) {
+                    LogUtil.logError(true, server.getName(), "Stopping monitoring task for server {}: {}", id, e.getMessage());
+                }
+            });
+            
+            LogUtil.logInfo(true, server.getName(), "Stop request submitted for server: {} (async)", id);
         } else {
             LogUtil.logWarning(true, server.getName(), "No running task found for server: {}", id);
         }
@@ -115,7 +112,8 @@ public class ServerTaskManager {
     public void shutdown() {
         LogUtil.logInfo(true, "app", "Shutting down all OPC UA monitoring tasks...");
 
-        // 遍历所有 datalogger 实例并关闭
+        taskExecutor.shutdown();
+        
         for (Map.Entry<String, OpcuaDatalogger> entry : dataloggerInstances.entrySet()) {
             String serverId = entry.getKey();
             OpcuaDatalogger datalogger = entry.getValue();
@@ -135,12 +133,6 @@ public class ServerTaskManager {
         LogUtil.logInfo(true, "app", "All OPC UA monitoring tasks shut down complete.");
     }
 
-    /**
-     * 检查指定服务器是否正在运行
-     *
-     * @param serverId 服务器ID
-     * @return true 表示正在运行
-     */
     public boolean isRunning(String serverId) {
         OpcuaDatalogger datalogger = dataloggerInstances.get(serverId);
         return datalogger != null && datalogger.isRunning();

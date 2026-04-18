@@ -9,7 +9,6 @@ import com.lego.common.ResultCodeEnum;
 import com.lego.pojo.QueryLoad;
 import com.lego.pojo.Server;
 import com.lego.pojo.template.BaseModule;
-import com.lego.pojo.template.ModuleType;
 import com.lego.pojo.template.custom.Table;
 import com.lego.pojo.template.Template;
 import com.lego.service.Impl.InstanceServiceImpl;
@@ -50,7 +49,7 @@ public class InstanceController extends BaseController {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
             return;
         }
-        if (queryLoad.getModuleType() == null) {
+        if (queryLoad.getModuleName() == null) {
             WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
             return;
         }
@@ -126,12 +125,12 @@ public class InstanceController extends BaseController {
      */
     @SuppressWarnings("unchecked")
     private Table findTableInModule(BaseModule<?> module, String tableName) {
-        if (module == null || module.getTablelist() == null) {
+        if (module == null || module.getTableList() == null) {
             return null;
         }
 
         // 遍历表格列表，查找匹配的表格
-        for (Object obj : module.getTablelist()) {
+        for (Object obj : module.getTableList()) {
             if (obj instanceof Table) {
                 Table table = (Table) obj;
                 if (tableName.equals(table.getName())) {

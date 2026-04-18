@@ -5,7 +5,7 @@ import {
   type CustomTableInterface,
   type CustomModuleInterface,
   type TemplateInterface, type CommModuleInterface, type CommTableInterface,
-  type AlarmTableInterface, type AlarmModuleInterface,
+  type AlarmTableInterface, type AlarmModuleInterface, TriggerType,
 } from "@/types/template.ts";
 
 
@@ -64,9 +64,82 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       this.name = data.name;
       this.port = data.port;
       this.postfix = data.postfix || "";
-      this.custom = data.custom ? JSON.parse(JSON.stringify(data.custom)) : this.custom;
-      this.alarm = data.alarm ? JSON.parse(JSON.stringify(data.alarm)) : this.alarm;
-      this.communication = data.communication ? JSON.parse(JSON.stringify(data.communication)) : this.communication;
+
+      this.custom = data.custom ? this.convertCustomModule(data.custom) : this.custom;
+      this.alarm = data.alarm ? this.convertAlarmModule(data.alarm) : this.alarm;
+      this.communication = data.communication ? this.convertCommModule(data.communication) : this.communication;
+    },
+
+    convertCustomModule(data: any): CustomModuleInterface {
+      const module = JSON.parse(JSON.stringify(data)) as any;
+
+      if (module.tableList) {
+        module.tableList.forEach((table: any) => {
+          if (table.nodeGroupType === 'SCALAR') {
+            table.nodeGroupType = NodeGroupType.SCALAR;
+          } else if (table.nodeGroupType === 'ARRAY') {
+            table.nodeGroupType = NodeGroupType.ARRAY;
+          }
+
+          if (table.nodeList) {
+            table.nodeList.forEach((node: any) => {
+              if (node.dataType === 'BOOL') {
+                node.dataType = DataType.BOOL;
+              } else if (node.dataType === 'INT') {
+                node.dataType = DataType.INT;
+              } else if (node.dataType === 'DOUBLE') {
+                node.dataType = DataType.DOUBLE;
+              } else if (node.dataType === 'STRING') {
+                node.dataType = DataType.STRING;
+              }
+            });
+          }
+        });
+      }
+
+      return module as CustomModuleInterface;
+    },
+
+    convertAlarmModule(data: any): AlarmModuleInterface {
+      const module = JSON.parse(JSON.stringify(data)) as any;
+
+      if (module.tableList) {
+        module.tableList.forEach((table: any) => {
+          if (table.nodeGroupType === 'SCALAR') {
+            table.nodeGroupType = NodeGroupType.SCALAR;
+          } else if (table.nodeGroupType === 'ARRAY') {
+            table.nodeGroupType = NodeGroupType.ARRAY;
+          }
+
+          if (table.nodeList) {
+            table.nodeList.forEach((node: any) => {
+              if (node.triggerType === 'RISING') {
+                node.triggerType = TriggerType.RISING;
+              } else if (node.triggerType === 'FALLING') {
+                node.triggerType = TriggerType.FALLING;
+              }
+            });
+          }
+        });
+      }
+
+      return module as AlarmModuleInterface;
+    },
+
+    convertCommModule(data: any): CommModuleInterface {
+      const module = JSON.parse(JSON.stringify(data)) as any;
+
+      if (module.tableList) {
+        module.tableList.forEach((table: any) => {
+          if (table.nodeGroupType === 'SCALAR') {
+            table.nodeGroupType = NodeGroupType.SCALAR;
+          } else if (table.nodeGroupType === 'ARRAY') {
+            table.nodeGroupType = NodeGroupType.ARRAY;
+          }
+        });
+      }
+
+      return module as CommModuleInterface;
     },
 
     // 校验 templateName
@@ -187,7 +260,7 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
 
       // 3. nodeType 必须是 SCALAR 或 ARRAY
       if (nt !== NodeGroupType.SCALAR && nt !== NodeGroupType.ARRAY) {
-        errors.push(`Table ${index + 1}: Node type must be SCALAR or ARRAY`)
+        errors.push(`Table ${index + 1}: Node type must be SCALAR or ARRAY, node type is ${nt}(type: ${typeof nt})`)
       }
 
       // 4. nodeList 不能为空

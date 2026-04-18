@@ -30,6 +30,8 @@ function selectTemplate(index: number) {
   templateStore.createNew = false;
   //troubleshooting
   console.log('Template ifNew: ', templateStore.createNew)
+  console.log('Template ', templateStore.$state)
+
 }
 
 function newTemplate() {

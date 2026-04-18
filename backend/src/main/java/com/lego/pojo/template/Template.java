@@ -41,9 +41,9 @@ public class Template {
         }
 
         return switch (moduleType) {
-            case Custom -> custom;
-            case Alarm -> alarm;
-            case Communication -> communication;
+            case CUSTOM -> custom;
+            case ALARM -> alarm;
+            case COMMUNICATION -> communication;
         };
     }
 }

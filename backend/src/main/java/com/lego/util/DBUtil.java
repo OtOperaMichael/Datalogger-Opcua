@@ -186,7 +186,7 @@ public class DBUtil {
      */
     public static void createTable(String schemaName, OpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
-        String safeTableName = sanitizeIdentifier(nodeGroup.getModuleType().toString().toLowerCase() + "_" + nodeGroup.getName());
+        String safeTableName = sanitizeIdentifier(nodeGroup.getFullTableName());
         String fullTableName = safeDbName + "." + safeTableName;
 
         StringBuilder columns = new StringBuilder();
@@ -220,7 +220,7 @@ public class DBUtil {
      */
     public static void createHyperTable(String schemaName, OpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
-        String safeTableName = sanitizeIdentifier(nodeGroup.getModuleType().toString().toLowerCase() + "_" + nodeGroup.getName());
+        String safeTableName = sanitizeIdentifier(nodeGroup.getFullTableName());
         String fullTableName = safeDbName + "." + safeTableName;
 
         StringBuilder columns = new StringBuilder();
@@ -445,7 +445,7 @@ public class DBUtil {
     public static void logInfo(String schemaName, String log) {
         // 如果数据库未初始化，只打印控制台日志，不抛异常
         if (!configLoaded || dataSource == null) {
-            LogUtil.logWarning(false,schemaName, log);
+            LogUtil.logInfo(false,schemaName, log);
             return;
         }
 

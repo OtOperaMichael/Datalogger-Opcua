@@ -102,12 +102,12 @@ public class OpcuaDatalogger {
         //Module1: custom, 遍历template中的所有table
         if (customModuleIsEnabled) {
 
-            for (int index = 0; index < template.getCustom().getTablelist().size(); index++) {
+            for (int index = 0; index < template.getCustom().getTableList().size(); index++) {
 
-                Table table = template.getCustom().getTablelist().get(index);
+                Table table = template.getCustom().getTableList().get(index);
                 //从前端传来的tagGroup有可能为空，为空则跳过
                 if (!table.getName().isEmpty()) {
-                    OpcUaNodeGroup nodeGroup = new OpcUaNodeGroup(serverName, ModuleType.Custom, table);
+                    OpcUaNodeGroup nodeGroup = new OpcUaNodeGroup(serverName, ModuleType.CUSTOM, table);
                     customModuleNodeGroupList.add(nodeGroup);
                     //create hyper table for each tagGroup
                     DBUtil.createHyperTable(serverName, nodeGroup);
@@ -150,11 +150,26 @@ public class OpcuaDatalogger {
                 return;
             }
 
-            // 创建客户端
-            OpcUaClientConfig config = OpcUaClientConfig.builder().setEndpoint(endpoint).build();
+            String endpointUrl = endpoint.getEndpointUrl();
+            LogUtil.logInfo(true, serverName, "Original endpoint URL from server: {}", endpointUrl);
+            
+            String fixedEndpointUrl = fixEndpointUrl(endpointUrl, serverUrl);
+            LogUtil.logInfo(true, serverName, "Fixed endpoint URL: {}", fixedEndpointUrl);
+            
+            EndpointDescription fixedEndpoint = new EndpointDescription(
+                    fixedEndpointUrl,
+                    endpoint.getServer(),
+                    endpoint.getServerCertificate(),
+                    endpoint.getSecurityMode(),
+                    endpoint.getSecurityPolicyUri(),
+                    endpoint.getUserIdentityTokens(),
+                    endpoint.getTransportProfileUri(),
+                    endpoint.getSecurityLevel()
+            );
+
+            OpcUaClientConfig config = OpcUaClientConfig.builder().setEndpoint(fixedEndpoint).build();
             client = OpcUaClient.create(config);
 
-            // 连接
             client.connect();
             LogUtil.logInfo(true, serverName, "Connected to OPC UA Server: {}", serverUrl);
 
@@ -174,6 +189,37 @@ public class OpcuaDatalogger {
             LogUtil.logError(true, serverName, "Failed to start server: {}", e.getMessage());
            e.printStackTrace();
         }
+    }
+
+    private String fixEndpointUrl(String endpointUrl, String originalUrl) {
+        try {
+            java.net.URI originalUri = new java.net.URI(originalUrl.replace("opc.tcp://", "http://"));
+            java.net.URI endpointUri = new java.net.URI(endpointUrl.replace("opc.tcp://", "http://"));
+            
+            String originalHost = originalUri.getHost();
+            String endpointHost = endpointUri.getHost();
+            
+            if (originalHost != null && endpointHost != null && !originalHost.equals(endpointHost)) {
+                LogUtil.logInfo(true, serverName, "Replacing endpoint host '{}' with '{}'", endpointHost, originalHost);
+                
+                int port = endpointUri.getPort();
+                String path = endpointUri.getPath();
+                
+                String fixedUrl = "opc.tcp://" + originalHost;
+                if (port > 0) {
+                    fixedUrl += ":" + port;
+                }
+                if (path != null && !path.isEmpty()) {
+                    fixedUrl += path;
+                }
+                
+                return fixedUrl;
+            }
+        } catch (Exception e) {
+            LogUtil.logWarning(true, serverName, "Failed to parse URLs, using original endpoint: {}", e.getMessage());
+        }
+        
+        return endpointUrl;
     }
 
     /**
@@ -259,7 +305,10 @@ public class OpcuaDatalogger {
             OpcUaNode node = nodeGroup.getNodeList().get(0);
             OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
             monitoredItem.setSamplingInterval(sampleInterval);
-            LogUtil.logInfo(true, serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
+
+            // 添加监控项到该 nodeGroup 的订阅
+            subscription.addMonitoredItem(monitoredItem);
+            LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{} in group: {}", node.getName(),node.getNodeId(), groupName);
 
         } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
             // 为 SCALAR 类型的每个节点创建监控项
@@ -269,7 +318,7 @@ public class OpcuaDatalogger {
 
                 // 添加监控项到该 nodeGroup 的订阅
                 subscription.addMonitoredItem(monitoredItem);
-                LogUtil.logInfo(true, serverName, "Added monitored item for node: {} in group: {}", node.getName(), groupName);
+                LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{}  in group: {}", node.getName(),node.getNodeId(), groupName);
             }
         }
 
@@ -341,7 +390,7 @@ public class OpcuaDatalogger {
                 boolean success = globalDataQueue.enqueueCustomData(serverName, nodeGroup);
 
                 if (success) {
-                    LogUtil.logInfo(true, serverName, "Data enqueued successfully for nodeGroup: {}, nodes count: {}",
+                    LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}, nodes count: {}",
                             groupName, nodeGroup.getNodeList().size());
                 } else {
                     LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {} - queue may be full", groupName);
@@ -430,8 +479,8 @@ public class OpcuaDatalogger {
         List<OpcUaNode> nodeList = nodeGroup.getNodeList();
 
         // 检查数组长度是否与节点数量匹配
-        if (arrayLength != nodeList.size()) {
-            LogUtil.logWarning(true, serverName, "Array length ({}) does not match node count ({}) for nodeGroup: {}",
+        if (arrayLength < nodeList.size()) {
+            LogUtil.logWarning(true, serverName, "Array length ({}) less than node count ({}) for nodeGroup: {}",
                     arrayLength, nodeList.size(), nodeGroup.getName());
         }
 

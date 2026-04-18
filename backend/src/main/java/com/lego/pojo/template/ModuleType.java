@@ -10,7 +10,7 @@ package com.lego.pojo.template;
  * @Version 1.0
  */
 public enum ModuleType {
-    Custom,
-    Alarm,
-    Communication
+    CUSTOM,
+    ALARM,
+    COMMUNICATION
 }

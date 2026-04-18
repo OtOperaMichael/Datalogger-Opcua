@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed} from 'vue';
+import {computed, watch} from 'vue';
 import {useNewTemplateStore} from "@/stores/useNewTemplateStore.ts";
 import {NodeGroupType, DataType, type CustomTableInterface} from "@/types/template.ts";
 import {useLoginUserStore} from "@/stores/useLoginUserStore.ts";
@@ -51,6 +51,40 @@ function addNode() {
 function removeNode(index: number) {
   template.removeTagName('custom', props.tableIndex, index);
 }
+
+function updateArrayNodeValues() {
+  if (tableData.value.nodeGroupType !== NodeGroupType.ARRAY) {
+    return;
+  }
+
+  const firstNode = tableData.value.nodeList[0];
+  if (!firstNode) {
+    return;
+  }
+
+  for (let i = 1; i < tableData.value.nodeList.length; i++) {
+    const node = tableData.value.nodeList[i];
+    if (node && firstNode.nodeId) {
+      node.nodeId = `${firstNode.nodeId}[${i}]`;
+      node.dataType = firstNode.dataType;
+    }
+  }
+}
+
+watch(
+  () => [tableData.value.nodeList[0]?.nodeId, tableData.value.nodeList[0]?.dataType, tableData.value.nodeGroupType],
+  () => {
+    updateArrayNodeValues();
+  },
+  { deep: true }
+);
+
+function isFirstNodeEditable(nodeIndex: number): boolean {
+  if (tableData.value.nodeGroupType !== NodeGroupType.ARRAY) {
+    return true;
+  }
+  return nodeIndex === 0;
+}
 </script>
 
 <template>
@@ -96,9 +130,9 @@ function removeNode(index: number) {
 
       <a-input
         placeholder="Node ID (e.g., ns=2;s=Tag1)"
-        style="width: 200px; margin-left: 10px;"
+        style="width: 400px; margin-left: 10px;"
         v-model:value="node.nodeId"
-        :disabled="isDisabled"
+        :disabled="isDisabled || !isFirstNodeEditable(index)"
       />
 
       <a-select
@@ -106,7 +140,7 @@ function removeNode(index: number) {
         style="width: 100px; margin-left: 10px;"
         v-model:value="node.dataType"
         :options="dataTypeOptions"
-        :disabled="isDisabled"
+        :disabled="isDisabled || !isFirstNodeEditable(index)"
       />
 
       <a-button

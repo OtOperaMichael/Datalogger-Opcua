@@ -95,7 +95,7 @@ public class GlobalDataQueue {
      */
     public boolean enqueueCustomData(String serverName, OpcUaNodeGroup nodeGroup) {
         try {
-            String tableName = nodeGroup.getName();
+            String tableName = nodeGroup.getFullTableName();
             LinkedHashMap<String, Object> data = new LinkedHashMap<>();
 
             // 遍历 nodeGroup 中的所有节点，提取数据并保持原始类型
@@ -113,14 +113,14 @@ public class GlobalDataQueue {
 
             if (!success) {
                 // 队列已满
-                LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}", 
-                    serverName, dataQueue.size());
+                LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}",
+                        serverName, dataQueue.size());
             }
 
             return success;
         } catch (Exception e) {
-            LogUtil.logError(true, "app", "Failed to enqueue OPC UA data for server {}: {}", 
-                serverName, e.getMessage());
+            LogUtil.logError(true, "app", "Failed to enqueue OPC UA data for server {}: {}",
+                    serverName, e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -162,8 +162,8 @@ public class GlobalDataQueue {
 
                 } else {
                     // 过载时立即写入告警日志（每次都写）
-                    LogUtil.logWarning(true, "app", "WARNING: Queue usage high! Total: {}, Current: {}, Usage: {:.2f}%, Processed: {}", 
-                        QUEUE_CAPACITY, currentSize, usagePercent * 100, getProcessingCount());
+                    LogUtil.logWarning(true, "app", "WARNING: Queue usage high! Total: {}, Current: {}, Usage: {:.2f}%, Processed: {}",
+                            QUEUE_CAPACITY, currentSize, usagePercent * 100, getProcessingCount());
                 }
 
             } catch (Exception e) {

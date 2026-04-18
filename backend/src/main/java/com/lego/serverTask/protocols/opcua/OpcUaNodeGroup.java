@@ -27,6 +27,10 @@ public class OpcUaNodeGroup {
     @Getter
     private String name;
 
+    // full table name: module_type_table_name
+    @Getter
+    private String fullTableName;
+
     // sample interval
     @Getter
     private Integer sampleInterval;
@@ -47,6 +51,7 @@ public class OpcUaNodeGroup {
         this.serverName = serverName;
         this.moduleType = moduleType;
         this.name = table.getName();
+        this.fullTableName = moduleType.toString().toLowerCase() + "_" + table.getName();
         this.sampleInterval = table.getSampleInterval();
         this.nodeType = table.getNodeGroupType();
         this.nodeList = new ArrayList<>();
