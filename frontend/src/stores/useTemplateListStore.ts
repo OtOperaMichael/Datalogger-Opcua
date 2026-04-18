@@ -9,13 +9,13 @@ export const useTemplateListStore = defineStore("templateListStore", {
       {
         id: "1undefined-template",
         name: "undefined-template",
-        sampleInterval: 499,
         port: "4840",
         postfix: "",
         custom: {
           enable: true,
           tableList: Array.from({length: 1}, () => ({
             name: "undefined-table",
+            sampleInterval: 499,
             nodeGroupType: NodeGroupType.SCALAR,
             nodeList: Array.from({length: 10}, () => ({
               name: "undefined-node",

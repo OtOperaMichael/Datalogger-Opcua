@@ -17,7 +17,7 @@ const MAX_NODE_COUNT = computed(() => systemConfigStore.maxTableFieldCount || 10
 
 const template = useNewTemplateStore();
 
-const isDisabled = computed(() => !loginUserStore.getIsLoggedIn || !template.custom.enable);
+const isDisabled = computed(() => !loginUserStore.getIsLoggedIn || !template.custom.enable || !template.editing);
 
 const tableData = computed<CustomTableInterface>(() => {
   return template.custom.tableList[props.tableIndex] || {

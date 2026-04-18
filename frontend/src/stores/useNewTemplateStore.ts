@@ -36,7 +36,8 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       enable: false,
       tableList: [] as CommTableInterface[]
     } as CommModuleInterface,
-    createNew: false
+    createNew: false,
+    editing: false
   }),
 
   actions: {

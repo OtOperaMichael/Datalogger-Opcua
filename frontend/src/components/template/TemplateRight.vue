@@ -68,7 +68,7 @@ const removeTableCustomModule = (targetKey: string) => {
     }
   });
 
-  templateStore.removeTable("custom",targetIndex);
+  templateStore.removeTable("custom", targetIndex);
 
   if (templateStore.custom.tableList.length && activeKeyCustomModule.value === targetKey) {
     if (lastIndex >= 0) {
@@ -98,6 +98,7 @@ const onInnerEditCustomModule = (targetKey: string | MouseEvent, action: string)
 async function saveTemplate() {
   //troubleshooting
   console.log('Template ifNew: ', templateStore.createNew)
+  console.log('Template editing: ', templateStore.editing)
 
   // 1. 校验
   const validation = templateStore.validateTemplate()
@@ -132,6 +133,8 @@ async function saveTemplate() {
       }
       //置位createNew, 此时再次保存需触发重名检查
       templateStore.createNew = true
+      // 设置editing为false，需要重新选择才能继续编辑
+      templateStore.editing = false
     }
   } catch
     (error) {
@@ -154,7 +157,7 @@ async function saveTemplate() {
         <a-input
           style="width: 200px;"
           placeholder="template name"
-          :disabled="!loginUserStore.getIsLoggedIn"
+          :disabled="!loginUserStore.getIsLoggedIn || !templateStore.editing"
           v-model:value="templateStore.name"
         />
       </div>
@@ -163,7 +166,7 @@ async function saveTemplate() {
         <a-input
           style="width: 100px;"
           placeholder="4840"
-          :disabled="!loginUserStore.getIsLoggedIn"
+          :disabled="!loginUserStore.getIsLoggedIn|| !templateStore.editing"
           v-model:value="templateStore.port"
         />
       </div>
@@ -172,7 +175,7 @@ async function saveTemplate() {
         <a-input
           style="width: 150px;"
           placeholder="Optional suffix"
-          :disabled="!loginUserStore.getIsLoggedIn"
+          :disabled="!loginUserStore.getIsLoggedIn|| !templateStore.editing"
           v-model:value="templateStore.postfix"
         />
       </div>
@@ -188,7 +191,7 @@ async function saveTemplate() {
                 <a-checkbox
                   :disabled="!loginUserStore.getIsLoggedIn"
                   v-model:checked="isCustomEnabled"
-                  @click.stop                  style="margin-right: 8px;"
+                  @click.stop style="margin-right: 8px;"
                 />
                 Custom
               </span>
@@ -227,6 +230,7 @@ async function saveTemplate() {
     <div id="templateBottom">
       <a-button type="primary"
                 v-show="loginUserStore.getIsLoggedIn"
+                :disabled="!templateStore.editing"
                 @click="saveTemplate()"
       >Save Template
       </a-button>

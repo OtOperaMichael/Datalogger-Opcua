@@ -12,12 +12,7 @@ const {templateList, selectedTemplateIndex} = storeToRefs(useTemplateListStore()
 const loginUserStore = useLoginUserStore()
 
 
-
-// // 当前选中的模板索引
-// const selectedTemplateIndex = ref(0);
-
 function selectTemplate(index: number) {
-  // 边界检查
   if (index < 0 || index >= templateList.value.length) return;
 
   selectedTemplateIndex.value = index;
@@ -26,10 +21,10 @@ function selectTemplate(index: number) {
   if (!templateData) return;
 
   templateStore.loadTemplate(templateData);
-  //赋值createNew
   templateStore.createNew = false;
-  //troubleshooting
+  templateStore.editing = true;
   console.log('Template ifNew: ', templateStore.createNew)
+  console.log('Template editing: ', templateStore.editing)
   console.log('Template ', templateStore.$state)
 
 }
@@ -37,10 +32,10 @@ function selectTemplate(index: number) {
 function newTemplate() {
   //初始化template
   templateStore.$reset()
-  //高亮index赋值
   selectedTemplateIndex.value = templateList.value.length + 1;
-  //赋值createNew
   templateStore.createNew = true;
+  templateStore.editing = true;
+  console.log('New template, editing: ', templateStore.editing)
 }
 
 // 删除server前确认
@@ -62,22 +57,28 @@ const showDeleteConfirm = (templateId: string, templateName: string) => {
 };
 
 //删除template
-async function deleteTemplate(id: string){
+async function deleteTemplate(id: string) {
   try {
     // 请求后端获取所有服务器信息
-    let {data} = await request.get("template/deleteTemplate",{params:{id:id}})
-    console.log("data:", data)
-    console.log('templateList:', data.data.templateList)
-    templateList.value = data.data.templateList
+    let {data} = await request.get("template/deleteTemplate", {params: {id: id}})
 
-    //troubleshooting
-    console.log('Template ifNew: ', templateStore.createNew)
-    console.log('Template now: ', templateStore.toJSON())
+    // 4. 处理响应
+    if (data?.code !== 200) {
+      message.error(data?.msg || 'Failed to delete template', 3)
+    } else {
+      console.log("data:", data)
+      console.log('templateList:', data.data.templateList)
+      templateList.value = data.data.templateList
 
-    //置位createNew, 此时再次保存需触发重名检查
-    templateStore.createNew = true
-    //清空id, 再保存不携带id发送请求
-    templateStore.id = ''
+      //troubleshooting
+      console.log('Template ifNew: ', templateStore.createNew)
+      console.log('Template now: ', templateStore.toJSON())
+
+      //置位createNew, 此时再次保存需触发重名检查
+      templateStore.createNew = true
+      templateStore.editing = false
+      templateStore.id = ''
+    }
 
   } catch (err: any) {
     message.error('Network error, please try again');
