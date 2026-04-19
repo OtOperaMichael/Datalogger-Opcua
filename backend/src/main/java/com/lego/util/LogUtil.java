@@ -19,6 +19,10 @@ public class LogUtil {
         System.out.println(msg);
     }
 
+    private static void logError(String msg) {
+        System.err.println(msg);
+    }
+
     public static void logInfo(Boolean dbSave, String schema, String msg) {
         String formattedLog = "[Info]: " + schema + ", " + msg;
         String logDbMsg = "[Info]: " + msg;
@@ -66,8 +70,8 @@ public class LogUtil {
         String formattedLog = "[Error]: " + schema + ", " + formatLogMessage(format, args);
         String logDbMsg = "[Error]: " + formatLogMessage(format, args);
 
-        // 调用原有的 logInfo 方法
-        logInfo(formattedLog);
+        // 调用原有的 logError 方法
+        logError(formattedLog);
 
         // 如果需要保存到数据库，则调用 saveToDB 方法
         if (dbSave) {

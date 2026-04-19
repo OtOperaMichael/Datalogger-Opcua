@@ -1,18 +1,26 @@
-<script setup lang="ts">
-import {useInstanceStore} from '@/stores/useInstanceStore.ts'
-
-const instanceStore = useInstanceStore()
-</script>
-
 <template>
   <div id="ServerRightFrame">
     <div class="log-content">
-      <p v-for="(log, index) in instanceStore.getLogs" :key="index" class="log-line">
+      <p
+        v-for="(log, index) in instanceStore.getLogs"
+        :key="index"
+        class="log-line"
+        :class="{
+          'log-error': log.includes('[Error]'),
+          'log-warning': log.includes('[Warning]')
+        }"
+      >
         {{ log }}
       </p>
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import {useInstanceStore} from '@/stores/useInstanceStore.ts'
+
+const instanceStore = useInstanceStore()
+</script>
 
 <style scoped>
 #ServerRightFrame {
@@ -37,4 +45,14 @@ const instanceStore = useInstanceStore()
   white-space: pre-wrap;
   word-wrap: break-word;
 }
+
+.log-error {
+  color: red;
+}
+
+.log-warning {
+  color: blue;
+}
 </style>
+
+
