@@ -3,8 +3,10 @@ package com.lego.util;
 
 import com.alibaba.druid.pool.DruidDataSource;
 import com.lego.pojo.DBConfig;
+import com.lego.pojo.template.ModuleType;
 import com.lego.serverTask.DataWriteTask;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
+import com.lego.serverTask.protocols.opcua.CustomNodeGroup;
 import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 
 import java.io.File;
@@ -90,7 +92,7 @@ public class DBUtil {
                 // 创建数据库app, 用于存储app日志
                 createSchemaIfNotExists("app");
 
-                LogUtil.logInfo(true,"app", "TimescaleDB connection pool initialized");
+                LogUtil.logInfo(true, "app", "TimescaleDB connection pool initialized");
 
                 return configLoaded;
             }
@@ -105,7 +107,7 @@ public class DBUtil {
                 dataSource = null;
             }
 
-            LogUtil.logError(true,"app", "Failed to initialize TimescaleDB connection pool: {}", e.getMessage());
+            LogUtil.logError(true, "app", "Failed to initialize TimescaleDB connection pool: {}", e.getMessage());
         }
         return false;
     }
@@ -132,7 +134,7 @@ public class DBUtil {
             String sql = "CREATE SCHEMA IF NOT EXISTS " + schemaName;
             stmt.execute(sql);
             createLogTable(schemaName);
-            LogUtil.logInfo(true,schemaName, "Schema created: {}", schemaName);
+            LogUtil.logInfo(true, schemaName, "Schema created: {}", schemaName);
 
         }
     }
@@ -144,7 +146,7 @@ public class DBUtil {
 
         // 先检查数据库是否存在
         if (!schemaExists(schemaName)) {
-            LogUtil.logWarning(true,"app", "TimescaleDB database does not exist, skip deletion: {}", schemaName);
+            LogUtil.logWarning(true, "app", "TimescaleDB database does not exist, skip deletion: {}", schemaName);
             return;
         }
 
@@ -152,7 +154,7 @@ public class DBUtil {
              Statement stmt = conn.createStatement()) {
             String sql = "DROP SCHEMA IF EXISTS " + schemaName + " CASCADE";
             stmt.execute(sql);
-            LogUtil.logInfo(true,"app", "TimescaleDB database deleted for server: {}", schemaName);
+            LogUtil.logInfo(true, "app", "TimescaleDB database deleted for server: {}", schemaName);
 
         }
     }
@@ -188,15 +190,19 @@ public class DBUtil {
         String safeDbName = sanitizeIdentifier(schemaName);
         String safeTableName = sanitizeIdentifier(nodeGroup.getFullTableName());
         String fullTableName = safeDbName + "." + safeTableName;
-
         StringBuilder columns = new StringBuilder();
-        for (OpcUaNode node : nodeGroup.getNodeList()) {
-            String safeColName = sanitizeIdentifier(node.getName());
-            String sqlType = mapDataTypeToSql(node.getDataType());
-            columns.append(safeColName).append(" ").append(sqlType).append(" NOT NULL, ");
-        }
-        if (columns.length() > 0) {
-            columns.setLength(columns.length() - 2);
+
+        if (nodeGroup.getModuleType() == ModuleType.CUSTOM) {
+            for (OpcUaNode node : nodeGroup.getNodeList()) {
+                String safeColName = sanitizeIdentifier(node.getName());
+                String sqlType = mapDataTypeToSql(node.getDataType());
+                columns.append(safeColName).append(" ").append(sqlType).append(" NOT NULL, ");
+            }
+            if (columns.length() > 0) {
+                columns.setLength(columns.length() - 2);
+            }
+        } else if (nodeGroup.getModuleType() == ModuleType.ALARM) {
+            //columns = id + name + start_time + end_time + duration + device + despcription
         }
 
         String sql = "CREATE TABLE IF NOT EXISTS " + fullTableName +
@@ -207,10 +213,10 @@ public class DBUtil {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
-            LogUtil.logInfo(true,schemaName, "Table {} created", fullTableName);
+            LogUtil.logInfo(true, schemaName, "Table {} created", fullTableName);
 
         } catch (SQLException e) {
-            LogUtil.logError(true,schemaName, "Create table failed: {}", e.getMessage());
+            LogUtil.logError(true, schemaName, "Create table failed: {}", e.getMessage());
 
         }
     }
@@ -218,7 +224,7 @@ public class DBUtil {
     /**
      * 创建 hyper 表，存储时序数据
      */
-    public static void createHyperTable(String schemaName, OpcUaNodeGroup nodeGroup) {
+    public static void createHyperTable(String schemaName, CustomNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
         String safeTableName = sanitizeIdentifier(nodeGroup.getFullTableName());
         String fullTableName = safeDbName + "." + safeTableName;
@@ -251,7 +257,7 @@ public class DBUtil {
 
             // 4. 只有真正创建了新表才记录日志
             if (tableJustCreated) {
-                LogUtil.logInfo(true,schemaName, "{} created", fullTableName);
+                LogUtil.logInfo(true, schemaName, "{} created", fullTableName);
             }
 
             // 如果是新表，尝试创建 hypertable（需 superuser 权限）
@@ -267,7 +273,7 @@ public class DBUtil {
                 boolean hypertableJustCreated = !hypertableExistedBefore && hypertableExists(conn, fullTableName);
 
                 if (hypertableJustCreated) {
-                    LogUtil.logInfo(true,schemaName, "{} Hypertable created", fullTableName);
+                    LogUtil.logInfo(true, schemaName, "{} Hypertable created", fullTableName);
                 }
 
                 // 设置数据保留策略（从配置获取天数）
@@ -277,12 +283,12 @@ public class DBUtil {
 
                     // 只有新表才记录保留策略日志
                     if (tableJustCreated) {
-                        LogUtil.logInfo(true,schemaName, "{} retention policy set to {} days", safeTableName, databaseRetentionDays);
+                        LogUtil.logInfo(true, schemaName, "{} retention policy set to {} days", safeTableName, databaseRetentionDays);
                     }
                 } catch (SQLException e) {
                     // 可能已存在保留策略或权限不足
                     if (tableJustCreated) {
-                        LogUtil.logWarning(true,schemaName, "Failed to set retention policy: {}", e.getMessage());
+                        LogUtil.logWarning(true, schemaName, "Failed to set retention policy: {}", e.getMessage());
                     }
                 }
             } catch (SQLException ignored) {
@@ -290,7 +296,7 @@ public class DBUtil {
             }
 
         } catch (SQLException e) {
-            LogUtil.logError(true,schemaName, "Create table failed: {}", e.getMessage());
+            LogUtil.logError(true, schemaName, "Create table failed: {}", e.getMessage());
         }
     }
 
@@ -350,7 +356,7 @@ public class DBUtil {
                 boolean hypertableJustCreated = !hypertableExistedBefore && hypertableExists(conn, fullTableName);
 
                 if (hypertableJustCreated) {
-                    LogUtil.logInfo(false,schemaName, "Log hypertable created");
+                    LogUtil.logInfo(false, schemaName, "Log hypertable created");
                 }
 
                 // 设置数据保留策略（从配置获取天数）
@@ -360,24 +366,24 @@ public class DBUtil {
 
                     // 只有新表才记录保留策略日志
                     if (tableJustCreated) {
-                        LogUtil.logInfo(false,schemaName, "{}.{} retention policy set to {} days", schemaName, logTableName, databaseRetentionDays);
+                        LogUtil.logInfo(false, schemaName, "{}.{} retention policy set to {} days", schemaName, logTableName, databaseRetentionDays);
                     }
                 } catch (SQLException e) {
                     // 可能已存在保留策略或权限不足
                     if (tableJustCreated) {
-                        LogUtil.logWarning(false,schemaName, "Failed to set retention policy: {}", e.getMessage());
+                        LogUtil.logWarning(false, schemaName, "Failed to set retention policy: {}", e.getMessage());
                     }
                 }
 
             } catch (SQLException e) {
                 // 可能已存在 hypertable 或权限不足
                 if (tableJustCreated) {
-                    LogUtil.logWarning(false,schemaName, "Log table is already a hypertable or insufficient permissions: {}", e.getMessage());
+                    LogUtil.logWarning(false, schemaName, "Log table is already a hypertable or insufficient permissions: {}", e.getMessage());
                 }
             }
 
         } catch (SQLException e) {
-            LogUtil.logError(false,schemaName, "Create log table failed: {}", e.getMessage());
+            LogUtil.logError(false, schemaName, "Create log table failed: {}", e.getMessage());
         }
     }
 
@@ -435,7 +441,7 @@ public class DBUtil {
             pstmt.executeUpdate();
 
         } catch (SQLException e) {
-            LogUtil.logError(true,schemaName, "Batch insert failed into {}: {}", fullTableName, e.getMessage());
+            LogUtil.logError(true, schemaName, "Batch insert failed into {}: {}", fullTableName, e.getMessage());
         }
     }
 
@@ -445,7 +451,7 @@ public class DBUtil {
     public static void logInfo(String schemaName, String log) {
         // 如果数据库未初始化，只打印控制台日志，不抛异常
         if (!configLoaded || dataSource == null) {
-            LogUtil.logInfo(false,schemaName, log);
+            LogUtil.logInfo(false, schemaName, log);
             return;
         }
 
@@ -463,7 +469,7 @@ public class DBUtil {
 
         } catch (SQLException e) {
             e.printStackTrace();
-            LogUtil.logError(false,schemaName, "Insert log failed into {}: log content: {}", fullTableName, log);
+            LogUtil.logError(false, schemaName, "Insert log failed into {}: log content: {}", fullTableName, log);
         }
     }
 
@@ -654,7 +660,7 @@ public class DBUtil {
             }
         } catch (SQLException e) {
             e.printStackTrace();
-            LogUtil.logError(true,schemaName, "TimescaleDB query error: {}", e.getMessage());
+            LogUtil.logError(true, schemaName, "TimescaleDB query error: {}", e.getMessage());
 
         }
 
@@ -693,7 +699,7 @@ public class DBUtil {
     private static Connection getConnection() throws SQLException {
         // 如果数据库未初始化，只打印控制台日志，不抛异常
         if (!configLoaded || dataSource == null) {
-            LogUtil.logWarning(false,"app", "Trying to get connection, but database not initialized");
+            LogUtil.logWarning(false, "app", "Trying to get connection, but database not initialized");
             return null;
         }
         return dataSource.getConnection(); // 从池中借出连接
@@ -701,7 +707,7 @@ public class DBUtil {
 
     private static String sanitizeIdentifier(String name) {
         if (name == null || !name.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-            LogUtil.logWarning(false,"app", "Invalid identifier: " + name);
+            LogUtil.logWarning(false, "app", "Invalid identifier: " + name);
         }
         // PostgreSQL 使用双引号包裹标识符
         return "\"" + name + "\"";
@@ -714,9 +720,9 @@ public class DBUtil {
         if (dataSource != null) {
             try {
                 dataSource.close(); // Druid 会关闭连接池，并反注册其代理驱动
-                LogUtil.logInfo(false,"app", "TimescaleDB datasource shut down");
+                LogUtil.logInfo(false, "app", "TimescaleDB datasource shut down");
             } catch (Exception e) {
-                LogUtil.logError(false,"app", "Error closing Druid DataSource: {}", e.getMessage());
+                LogUtil.logError(false, "app", "Error closing Druid DataSource: {}", e.getMessage());
 
             }
             dataSource = null;
@@ -740,11 +746,11 @@ public class DBUtil {
             if (driver.getClass().getClassLoader() == currentClassLoader) {
                 try {
                     DriverManager.deregisterDriver(driver);
-                    LogUtil.logInfo(false,"app", "Deregistering JDBC driver: {}", driver.getClass().getName());
+                    LogUtil.logInfo(false, "app", "Deregistering JDBC driver: {}", driver.getClass().getName());
 
-                    LogUtil.logInfo(false,"app", "Deregistered JDBC driver completed");
+                    LogUtil.logInfo(false, "app", "Deregistered JDBC driver completed");
                 } catch (SQLException e) {
-                    LogUtil.logError(false,"app", "Failed to deregister driver: {}", e.getMessage());
+                    LogUtil.logError(false, "app", "Failed to deregister driver: {}", e.getMessage());
 
                 }
             }
@@ -784,11 +790,11 @@ public class DBUtil {
                 return rs.next(); // 能读到结果即视为连通
             }
         } catch (ClassNotFoundException e) {
-            LogUtil.logError(false,"app", "PostgreSQL driver not found: {}", e.getMessage());
+            LogUtil.logError(false, "app", "PostgreSQL driver not found: {}", e.getMessage());
 
             return false;
         } catch (SQLException e) {
-            LogUtil.logError(false,"app", "PostgreSQL test connection failed: {}", e.getMessage());
+            LogUtil.logError(false, "app", "PostgreSQL test connection failed: {}", e.getMessage());
 
             return false;
         } finally {
@@ -814,10 +820,10 @@ public class DBUtil {
         if (file.exists()) {
             boolean deleted = file.delete();
             if (deleted) {
-                LogUtil.logInfo(true,"app", "Deleted TimescaleDB config file: {}", path);
+                LogUtil.logInfo(true, "app", "Deleted TimescaleDB config file: {}", path);
 
             } else {
-                LogUtil.logError(true,"app", "Failed to delete TimescaleDB config file: {}", path);
+                LogUtil.logError(true, "app", "Failed to delete TimescaleDB config file: {}", path);
 
             }
             configLoaded = false;
@@ -886,7 +892,7 @@ public class DBUtil {
                 logMessages.add(formattedLog);
             }
         } catch (SQLException e) {
-            LogUtil.logError(true,"app", "Query logs failed for schema {}: {}", schemaName, e.getMessage());
+            LogUtil.logError(true, "app", "Query logs failed for schema {}: {}", schemaName, e.getMessage());
             e.printStackTrace();
         }
 

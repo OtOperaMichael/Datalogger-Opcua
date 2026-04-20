@@ -12,8 +12,7 @@ package com.lego.serverTask;
 
 
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
-import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
-import com.lego.util.DBUtil;
+import com.lego.serverTask.protocols.opcua.CustomNodeGroup;
 import com.lego.util.LogUtil;
 import com.lego.util.ThreadDiagnosticUtil;
 
@@ -93,7 +92,7 @@ public class GlobalDataQueue {
      * 添加custom监控数据到队列（OPC UA 数据）
      * 根据节点的实际数据类型保持原始类型
      */
-    public boolean enqueueCustomData(String serverName, OpcUaNodeGroup nodeGroup) {
+    public boolean enqueueCustomData(String serverName, CustomNodeGroup nodeGroup) {
         try {
             String tableName = nodeGroup.getFullTableName();
             LinkedHashMap<String, Object> data = new LinkedHashMap<>();

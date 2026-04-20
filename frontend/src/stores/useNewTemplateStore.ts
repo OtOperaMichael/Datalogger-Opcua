@@ -669,7 +669,12 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         return {valid: false, field: 'postfix', message: postfixCheck.message}
       }
 
-      /** 4.tableList 的 table校验
+      //4. 至少有一个模块是启用状态
+      if (!this.custom.enable && !this.alarm.enable && !this.communication.enable) {
+        return {valid: false, field: 'moduleEnable', message: 'At least one module (Custom, Alarm, or Comm) must be enabled'}
+      }
+
+      /** 5.tableList 的 table校验
        * 每个table的 table name以字母开头，不能包含空格, 或为空
        *
        * 每个table的 tagaddr 以[0] 结束，或为空

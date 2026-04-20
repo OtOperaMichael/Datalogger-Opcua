@@ -27,10 +27,6 @@ public class OpcUaNodeGroup {
     @Getter
     private String name;
 
-    // full table name: module_type_table_name
-    @Getter
-    private String fullTableName;
-
     // sample interval
     @Getter
     private Integer sampleInterval;
@@ -43,15 +39,18 @@ public class OpcUaNodeGroup {
     @Getter
     private List<OpcUaNode> nodeList;
 
+    @Getter
+    private String fullTableName;
+
     // nodeId 到 OpcUaNode 的映射，用于快速查找
     private Map<NodeId, OpcUaNode> nodeIdToNodeMap;
+
 
     public OpcUaNodeGroup(String serverName, ModuleType moduleType, Table table) {
 
         this.serverName = serverName;
         this.moduleType = moduleType;
         this.name = table.getName();
-        this.fullTableName = moduleType.toString().toLowerCase() + "_" + table.getName();
         this.sampleInterval = table.getSampleInterval();
         this.nodeType = table.getNodeGroupType();
         this.nodeList = new ArrayList<>();

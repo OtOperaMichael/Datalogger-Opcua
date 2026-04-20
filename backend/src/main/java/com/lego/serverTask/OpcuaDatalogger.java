@@ -5,8 +5,9 @@ import com.lego.pojo.template.custom.NodeGroupType;
 import com.lego.pojo.template.custom.Table;
 import com.lego.pojo.Server;
 import com.lego.pojo.template.Template;
+import com.lego.serverTask.protocols.opcua.AlarmNodeGroup;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
-import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
+import com.lego.serverTask.protocols.opcua.CustomNodeGroup;
 import com.lego.util.DBUtil;
 import com.lego.util.LogUtil;
 import com.lego.util.TemplateUtil;
@@ -48,7 +49,9 @@ public class OpcuaDatalogger {
     private final boolean alarmModuleIsEnabled;
     private final boolean communicationModuleIsEnabled;
 
-    private ArrayList<OpcUaNodeGroup> customModuleNodeGroupList = new ArrayList<>();
+    private final ArrayList<CustomNodeGroup> customModuleNodeGroupList = new ArrayList<>();
+    private final ArrayList<AlarmNodeGroup> alarmModuleNodeGroupList = new ArrayList<>();
+    private final ArrayList<CustomNodeGroup> commModuleNodeGroupList = new ArrayList<>();
 
     // 引用全局队列
     private final GlobalDataQueue globalDataQueue;
@@ -107,7 +110,7 @@ public class OpcuaDatalogger {
                 Table table = template.getCustom().getTableList().get(index);
                 //从前端传来的tagGroup有可能为空，为空则跳过
                 if (!table.getName().isEmpty()) {
-                    OpcUaNodeGroup nodeGroup = new OpcUaNodeGroup(serverName, ModuleType.CUSTOM, table);
+                    CustomNodeGroup nodeGroup = new CustomNodeGroup(serverName, ModuleType.CUSTOM, table);
                     customModuleNodeGroupList.add(nodeGroup);
                     //create hyper table for each tagGroup
                     DBUtil.createHyperTable(serverName, nodeGroup);
@@ -120,6 +123,25 @@ public class OpcuaDatalogger {
         }
 
         //Module2: alarm
+        if (alarmModuleIsEnabled) {
+
+            for (int index = 0; index < template.getAlarm().getTableList().size(); index++) {
+
+                Table table = template.getCustom().getTableList().get(index);
+                //从前端传来的tagGroup有可能为空，为空则跳过
+                if (!table.getName().isEmpty()) {
+                    AlarmNodeGroup nodeGroup = new AlarmNodeGroup(serverName, ModuleType.ALARM, table);
+                    alarmModuleNodeGroupList.add(nodeGroup);
+
+                } else {
+                    break;
+                }
+            }
+
+            //create table, non-hyper, one single table for alarm module, called "alarm_history"
+            DBUtil.createTable(serverName, alarmModuleNodeGroupList.get(0));
+
+        }
 
         //Module3: communication
 
@@ -175,7 +197,7 @@ public class OpcuaDatalogger {
 
             // 创建订阅
             if (customModuleIsEnabled) {
-                for (OpcUaNodeGroup nodeGroup : customModuleNodeGroupList) {
+                for (CustomNodeGroup nodeGroup : customModuleNodeGroupList) {
                     createSubscriptionForNodeGroup(client, nodeGroup);
                 }
             }
@@ -278,7 +300,7 @@ public class OpcuaDatalogger {
      * @param client    OPC UA 客户端
      * @param nodeGroup 节点组
      */
-    private void createSubscriptionForNodeGroup(OpcUaClient client, OpcUaNodeGroup nodeGroup) throws Exception {
+    private void createSubscriptionForNodeGroup(OpcUaClient client, CustomNodeGroup nodeGroup) throws Exception {
         String groupName = nodeGroup.getName();
         Integer sampleInterval = nodeGroup.getSampleInterval();
         LogUtil.logInfo(true, serverName, "Creating subscription for nodeGroup: {}", groupName);
@@ -351,7 +373,7 @@ public class OpcuaDatalogger {
      * @param items     监控项列表
      * @param values    数据值列表
      */
-    private void handleDataChange(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+    private void handleDataChange(CustomNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
         try {
             // 参数验证
             if (items == null || values == null || items.isEmpty() || values.isEmpty()) {
@@ -413,7 +435,7 @@ public class OpcuaDatalogger {
      * @param values    数据值列表
      * @return 是否有节点发生变化
      */
-    private boolean handleScalarData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+    private boolean handleScalarData(CustomNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
         boolean hasChanges = false;
 
         for (int i = 0; i < items.size(); i++) {
@@ -453,7 +475,7 @@ public class OpcuaDatalogger {
      * @param values    数据值列表（只有一个元素，包含数组）
      * @return 是否有节点发生变化
      */
-    private boolean handleArrayData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+    private boolean handleArrayData(CustomNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
         // ARRAY 类型应该只有一个监控项（订阅的第一个节点）
         if (items.size() != 1 || values.size() != 1) {
             LogUtil.logWarning(true, serverName, "ARRAY nodeGroup should have only 1 monitored item, but got {}", items.size());
@@ -520,7 +542,7 @@ public class OpcuaDatalogger {
      * @param nodeId    OPC UA NodeId
      * @return 匹配的 OpcUaNode，未找到返回 null
      */
-    private OpcUaNode findNodeByNodeId(OpcUaNodeGroup nodeGroup, NodeId nodeId) {
+    private OpcUaNode findNodeByNodeId(CustomNodeGroup nodeGroup, NodeId nodeId) {
         return nodeGroup.getNodeByNodeId(nodeId);
     }
 
