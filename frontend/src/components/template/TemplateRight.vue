@@ -2,10 +2,12 @@
 import {ref, computed} from 'vue';
 import TabCustomModule from "@/components/template/tabs/TabCustomModule.vue";
 import TabAlarmModule from "@/components/template/tabs/TabAlarmModule.vue";
+import TabCommModule from "@/components/template/tabs/TabCommModule.vue";
 import {message} from "ant-design-vue";
 
 const activeKeyCustomModule = ref('1');
 const activeKeyAlarmModule = ref('1');
+const activeKeyCommModule = ref('1');
 const outerActiveKey = ref('1');
 import {useNewTemplateStore} from "@/stores/useNewTemplateStore.ts";
 import request from "@/utils/request";
@@ -40,6 +42,14 @@ const isAlarmEnabled = computed({
   }
 });
 
+// 是否启用通讯日志采集
+const isCommEnabled = computed({
+  get: () => templateStore.communication.enable,
+  set: (value) => {
+    templateStore.communication.enable = value;
+  }
+});
+
 // 计算属性：生成内部 tabs 列表 - Custom Module
 const innerPanesCustomModule = computed(() => {
   return templateStore.custom.tableList.map((_, index) => ({
@@ -57,6 +67,16 @@ const innerPanesAlarmModule = computed(() => {
     title: `Group ${index + 1}`,
     index: index,
     closable: templateStore.alarm.tableList.length > 1
+  }));
+});
+
+// 计算属性：生成内部 tabs 列表 - Communication Module
+const innerPanesCommModule = computed(() => {
+  return templateStore.communication.tableList.map((_, index) => ({
+    key: String(index + 1),
+    title: `Group ${index + 1}`,
+    index: index,
+    closable: templateStore.communication.tableList.length > 1
   }));
 });
 
@@ -167,6 +187,61 @@ const onInnerEditAlarmModule = (targetKey: string | MouseEvent, action: string) 
     addTableAlarmModule();
   } else {
     removeTableAlarmModule(targetKey as string);
+  }
+};
+
+// 添加新 table - Communication Module
+const addTableCommModule = () => {
+  if (templateStore.communication.tableList.length >= MAX_TABLE_COUNT.value) {
+    message.warning(`Maximum number of tables ${MAX_TABLE_COUNT.value} reached'`);
+    return;
+  }
+
+  const newKey = String(templateStore.communication.tableList.length + 1);
+  activeKeyCommModule.value = newKey;
+  templateStore.addTable("communication");
+};
+
+// 删除 table - Communication Module
+const removeTableCommModule = (targetKey: string) => {
+  if (templateStore.communication.tableList.length <= 1) {
+    message.warning('At least one table must exist');
+    return;
+  }
+
+  const targetIndex = parseInt(targetKey) - 1;
+
+  let lastIndex = 0;
+  innerPanesCommModule.value.forEach((pane, i) => {
+    if (pane.key === targetKey) {
+      lastIndex = i - 1;
+    }
+  });
+
+  templateStore.removeTable("communication", targetIndex);
+
+  if (templateStore.communication.tableList.length && activeKeyCommModule.value === targetKey) {
+    if (lastIndex >= 0) {
+      activeKeyCommModule.value = String(lastIndex + 1);
+    } else {
+      activeKeyCommModule.value = '1';
+    }
+  } else if (targetIndex < parseInt(activeKeyCommModule.value) - 1) {
+    activeKeyCommModule.value = String(parseInt(activeKeyCommModule.value) - 1);
+  }
+};
+
+// 处理编辑事件 - Communication Module
+const onInnerEditCommModule = (targetKey: string | MouseEvent, action: string) => {
+  if (!loginUserStore.getIsLoggedIn) {
+    message.warning('Please log in first to modify the template.');
+    return;
+  }
+
+  if (action === 'add') {
+    addTableCommModule();
+  } else {
+    removeTableCommModule(targetKey as string);
   }
 };
 
@@ -316,8 +391,31 @@ async function saveTemplate() {
           </a-tab-pane>
 
           <!--module 3: communication logger-->
-          <a-tab-pane key="3" tab="Comm">
-
+          <a-tab-pane key="3">
+            <template #tab>
+              <span>
+                <a-checkbox
+                  :disabled="!loginUserStore.getIsLoggedIn"
+                  v-model:checked="isCommEnabled"
+                  @click.stop style="margin-right: 8px;"
+                />
+                Comm
+              </span>
+            </template>
+            <a-tabs
+              v-model:activeKey="activeKeyCommModule"
+              type="editable-card"
+              @edit="onInnerEditCommModule"
+            >
+              <a-tab-pane
+                v-for="pane in innerPanesCommModule"
+                :key="pane.key"
+                :tab="pane.title"
+                :closable="pane.closable"
+              >
+                <TabCommModule :table-index="pane.index"/>
+              </a-tab-pane>
+            </a-tabs>
           </a-tab-pane>
 
 

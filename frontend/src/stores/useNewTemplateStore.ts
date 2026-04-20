@@ -44,7 +44,15 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
     } as AlarmModuleInterface,
     communication: {
       enable: false,
-      tableList: [] as CommTableInterface[]
+      tableList: Array.from({length: 1}, () => ({
+        name: "",
+        sampleInterval: 1000,
+        nodeGroupType: NodeGroupType.SCALAR,
+        nodeList: Array.from({length: 10}, () => ({
+          name: "",
+          nodeId: ""
+        }))
+      })) as CommTableInterface[]
     } as CommModuleInterface,
     createNew: false,
     editing: false
@@ -439,6 +447,93 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return errors
     },
 
+    // 校验单个 table, communication module
+    validateSingleCommTable(table: CommTableInterface, index: number) {
+      const errors = []
+      const tn = table.name
+      const nt = table.nodeGroupType
+      const nl = table.nodeList
+      const si = table.sampleInterval
+
+      // 1. tableName 不能为空
+      if (tn === '') {
+        errors.push(`Comm Table ${index + 1}: Table name is required`)
+      } else {
+        // 只有在有值时才校验格式
+        if (/\s/.test(tn)) {
+          errors.push(`Comm Table ${index + 1}: Table name cannot contain spaces or whitespace`)
+        }
+        if (!/^[a-z][a-z0-9_-]*$/.test(tn)) {
+          errors.push(`Comm Table ${index + 1}: Table name must start with a lowercase letter and contain only lowercase letters, digits, underscores (_), or hyphens (-)`)
+        }
+      }
+
+      // 2. 校验 sampleInterval
+      const intervalCheck = this.validateSampleInterval(si, index)
+      if (!intervalCheck.valid) {
+        errors.push(intervalCheck.message!)
+      }
+
+      // 3. nodeType 必须是 SCALAR 或 ARRAY
+      if (nt !== NodeGroupType.SCALAR && nt !== NodeGroupType.ARRAY) {
+        errors.push(`Comm Table ${index + 1}: Node type must be SCALAR or ARRAY, node type is ${nt}(type: ${typeof nt})`)
+      }
+
+      // 4. nodeList 不能为空
+      if (!nl || nl.length === 0) {
+        errors.push(`Comm Table ${index + 1}: Node list is required and cannot be empty`)
+      } else {
+        // 校验每个 node
+        for (let i = 0; i < nl.length; i++) {
+          const node = nl[i]
+
+          // 安全检查：node 不能为 undefined
+          if (!node) {
+            errors.push(`Comm Table ${index + 1}, Node ${i + 1}: Node is undefined`)
+            continue
+          }
+
+          // nodeName 不能为空
+          if (!node.name || node.name === '') {
+            errors.push(`Comm Table ${index + 1}, Node ${i + 1}: Node name is required`)
+          } else {
+            // 校验 nodeName 格式
+            if (/\s/.test(node.name)) {
+              errors.push(`Comm Table ${index + 1}, Node "${node.name}": Cannot contain spaces or whitespace`)
+            }
+            if (!/^[a-z][a-z0-9_-]*$/.test(node.name)) {
+              errors.push(`Comm Table ${index + 1}, Node "${node.name}": Must start with a lowercase letter and contain only lowercase letters, digits, underscores (_), or hyphens (-)`)
+            }
+          }
+
+          // nodeId 不能为空
+          if (!node.nodeId || node.nodeId === '') {
+            errors.push(`Comm Table ${index + 1}, Node ${i + 1}: NodeId is required`)
+          }
+        }
+
+        // 5. nodeList 所有 nodeName 不能重复
+        const seenNames = new Set()
+        for (let i = 0; i < nl.length; i++) {
+          const node = nl[i]
+
+          // 安全检查
+          if (!node) continue
+
+          const nodeName = node.name
+          if (nodeName) {
+            if (seenNames.has(nodeName)) {
+              errors.push(`Comm Table ${index + 1}: Duplicate node name "${nodeName}" in nodeList`)
+            } else {
+              seenNames.add(nodeName)
+            }
+          }
+        }
+      }
+
+      return errors
+    },
+
     // 校验整个 custom module
     validateCustomModule() {
       // 如果 custom module 未启用，直接返回有效
@@ -515,6 +610,44 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return {valid: true}
     },
 
+    // 校验整个 communication module
+    validateCommModule() {
+      // 如果 communication module 未启用，直接返回有效
+      if (!this.communication.enable) {
+        return {valid: true}
+      }
+
+      const allErrors = []
+
+      // 1. 先校验每个 table 的内部规则
+      for (let i = 0; i < this.communication.tableList.length; i++) {
+        const table = this.communication.tableList[i]
+        if (table) {
+          const errors = this.validateSingleCommTable(table, i)
+          allErrors.push(...errors)
+        }
+      }
+
+      // 2. 跨表格 tableName 唯一性校验（仅非空）
+      const seenTableNames = new Set()
+      for (let i = 0; i < this.communication.tableList.length; i++) {
+        const tableName = this.communication.tableList[i]?.name
+        if (tableName !== '') {
+          if (seenTableNames.has(tableName)) {
+            allErrors.push(`Comm table name "${tableName}" is duplicated in Table ${i + 1}`)
+          } else {
+            seenTableNames.add(tableName)
+          }
+        }
+      }
+
+      if (allErrors.length > 0) {
+        return {valid: false, message: allErrors[0]}
+      }
+
+      return {valid: true}
+    },
+
     //校验整个template表格
     validateTemplate(): { valid: boolean; field?: string; message?: string } {
 
@@ -564,6 +697,11 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         return {valid: false, field: 'alarmTableList', message: alarmModuleCheck.message}
       }
 
+      const commModuleCheck = this.validateCommModule()
+      if (!commModuleCheck.valid) {
+        return {valid: false, field: 'commTableList', message: commModuleCheck.message}
+      }
+
       return {valid: true}
 
     },
@@ -605,9 +743,21 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         });
         return true;
       } else if (moduleName === 'communication') {
-        // TODO: Implement communication module table addition
-        // Communication module may have different table structure
-        return false;
+        const module = this.communication;
+        if (!module || module.tableList.length >= 100) {
+          return false;
+        }
+
+        module.tableList.push({
+          name: "",
+          sampleInterval: 1000,
+          nodeGroupType: NodeGroupType.SCALAR,
+          nodeList: Array.from({length: 10}, () => ({
+            name: "",
+            nodeId: ""
+          }))
+        });
+        return true;
       }
       return false;
     },
@@ -630,9 +780,13 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         module.tableList.splice(index, 1);
         return true;
       } else if (moduleName === 'communication') {
-        // TODO: Implement communication module table removal
-        // Communication module may have different table structure and removal logic
-        return false;
+        const module = this.communication;
+        if (!module || module.tableList.length <= 1) {
+          return false;
+        }
+
+        module.tableList.splice(index, 1);
+        return true;
       }
       return false;
     },
@@ -674,9 +828,21 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         });
         return true;
       } else if (moduleName === 'communication') {
-        // TODO: Implement communication module tag/node addition
-        // Communication module may have different node structure
-        return false;
+        const module = this.communication;
+        if (!module) {
+          return false;
+        }
+
+        const table = module.tableList[tableIndex];
+        if (!table || table.nodeList.length >= 100) {
+          return false;
+        }
+
+        table.nodeList.push({
+          name: "",
+          nodeId: ""
+        });
+        return true;
       }
       return false;
     },
@@ -709,9 +875,18 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         table.nodeList.splice(tagNameIndex, 1);
         return true;
       } else if (moduleName === 'communication') {
-        // TODO: Implement communication module tag/node removal
-        // Communication module may have different node structure and removal logic
-        return false;
+        const module = this.communication;
+        if (!module) {
+          return false;
+        }
+
+        const table = module.tableList[tableIndex];
+        if (!table || table.nodeList.length <= 1) {
+          return false;
+        }
+
+        table.nodeList.splice(tagNameIndex, 1);
+        return true;
       }
       return false;
     }
