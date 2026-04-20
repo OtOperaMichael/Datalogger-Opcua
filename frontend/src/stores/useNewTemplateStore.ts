@@ -30,7 +30,17 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
     } as CustomModuleInterface,
     alarm: {
       enable: false,
-      tableList: [] as AlarmTableInterface[]
+      tableList: Array.from({length: 1}, () => ({
+        name: "",
+        sampleInterval: 1000,
+        nodeGroupType: NodeGroupType.SCALAR,
+        nodeList: Array.from({length: 10}, () => ({
+          name: "",
+          nodeId: "",
+          triggerType: TriggerType.RISING,
+          description: ""
+        }))
+      })) as AlarmTableInterface[]
     } as AlarmModuleInterface,
     communication: {
       enable: false,
@@ -329,6 +339,106 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return errors
     },
 
+    // 校验单个 table, alarm module
+    validateSingleAlarmTable(table: AlarmTableInterface, index: number) {
+      const errors = []
+      const tn = table.name
+      const nt = table.nodeGroupType
+      const nl = table.nodeList
+      const si = table.sampleInterval
+
+      // 1. tableName 不能为空
+      if (tn === '') {
+        errors.push(`Alarm Table ${index + 1}: Table name is required`)
+      } else {
+        // 只有在有值时才校验格式
+        if (/\s/.test(tn)) {
+          errors.push(`Alarm Table ${index + 1}: Table name cannot contain spaces or whitespace`)
+        }
+        if (!/^[a-z][a-z0-9_-]*$/.test(tn)) {
+          errors.push(`Alarm Table ${index + 1}: Table name must start with a lowercase letter and contain only lowercase letters, digits, underscores (_), or hyphens (-)`)
+        }
+      }
+
+      // 2. 校验 sampleInterval
+      const intervalCheck = this.validateSampleInterval(si, index)
+      if (!intervalCheck.valid) {
+        errors.push(intervalCheck.message!)
+      }
+
+      // 3. nodeType 必须是 SCALAR 或 ARRAY
+      if (nt !== NodeGroupType.SCALAR && nt !== NodeGroupType.ARRAY) {
+        errors.push(`Alarm Table ${index + 1}: Node type must be SCALAR or ARRAY, node type is ${nt}(type: ${typeof nt})`)
+      }
+
+      // 4. nodeList 不能为空
+      if (!nl || nl.length === 0) {
+        errors.push(`Alarm Table ${index + 1}: Node list is required and cannot be empty`)
+      } else {
+        // 校验每个 node
+        for (let i = 0; i < nl.length; i++) {
+          const node = nl[i]
+
+          // 安全检查：node 不能为 undefined
+          if (!node) {
+            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Node is undefined`)
+            continue
+          }
+
+          // nodeName 不能为空
+          if (!node.name || node.name === '') {
+            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Node name is required`)
+          } else {
+            // 校验 nodeName 格式
+            if (/\s/.test(node.name)) {
+              errors.push(`Alarm Table ${index + 1}, Node "${node.name}": Cannot contain spaces or whitespace`)
+            }
+            if (!/^[a-z][a-z0-9_-]*$/.test(node.name)) {
+              errors.push(`Alarm Table ${index + 1}, Node "${node.name}": Must start with a lowercase letter and contain only lowercase letters, digits, underscores (_), or hyphens (-)`)
+            }
+          }
+
+          // nodeId 不能为空
+          if (!node.nodeId || node.nodeId === '') {
+            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: NodeId is required`)
+          }
+
+          // triggerType 必须有效
+          if (node.triggerType === undefined || node.triggerType === null) {
+            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Trigger type is required`)
+          } else if (node.triggerType !== TriggerType.RISING &&
+                     node.triggerType !== TriggerType.FALLING) {
+            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Invalid trigger type. Must be RISING or FALLING`)
+          }
+
+          // description 可以为空，但如果非空则不能包含空格
+          if (node.description && /\s/.test(node.description)) {
+            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Description cannot contain spaces or whitespace`)
+          }
+        }
+
+        // 5. nodeList 所有 nodeName 不能重复
+        const seenNames = new Set()
+        for (let i = 0; i < nl.length; i++) {
+          const node = nl[i]
+
+          // 安全检查
+          if (!node) continue
+
+          const nodeName = node.name
+          if (nodeName) {
+            if (seenNames.has(nodeName)) {
+              errors.push(`Alarm Table ${index + 1}: Duplicate node name "${nodeName}" in nodeList`)
+            } else {
+              seenNames.add(nodeName)
+            }
+          }
+        }
+      }
+
+      return errors
+    },
+
     // 校验整个 custom module
     validateCustomModule() {
       // 如果 custom module 未启用，直接返回有效
@@ -367,6 +477,44 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       return {valid: true}
     },
 
+    // 校验整个 alarm module
+    validateAlarmModule() {
+      // 如果 alarm module 未启用，直接返回有效
+      if (!this.alarm.enable) {
+        return {valid: true}
+      }
+
+      const allErrors = []
+
+      // 1. 先校验每个 table 的内部规则
+      for (let i = 0; i < this.alarm.tableList.length; i++) {
+        const table = this.alarm.tableList[i]
+        if (table) {
+          const errors = this.validateSingleAlarmTable(table, i)
+          allErrors.push(...errors)
+        }
+      }
+
+      // 2. 跨表格 tableName 唯一性校验（仅非空）
+      const seenTableNames = new Set()
+      for (let i = 0; i < this.alarm.tableList.length; i++) {
+        const tableName = this.alarm.tableList[i]?.name
+        if (tableName !== '') {
+          if (seenTableNames.has(tableName)) {
+            allErrors.push(`Alarm table name "${tableName}" is duplicated in Table ${i + 1}`)
+          } else {
+            seenTableNames.add(tableName)
+          }
+        }
+      }
+
+      if (allErrors.length > 0) {
+        return {valid: false, message: allErrors[0]}
+      }
+
+      return {valid: true}
+    },
+
     //校验整个template表格
     validateTemplate(): { valid: boolean; field?: string; message?: string } {
 
@@ -376,7 +524,7 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         return {valid: false, field: 'templateName', message: nameCheck.message}
       }
 
-      //2. hostCpuSlot 格式必须为 “x,x” x为数字
+      //2. hostCpuSlot 格式必须为 "x,x" x为数字
       const portCheck = this.validatePort()
       if (!portCheck.valid) {
         return {valid: false, field: 'hostCpuSlot', message: portCheck.message}
@@ -411,6 +559,11 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         return {valid: false, field: 'tableList', message: customModuleCheck.message}
       }
 
+      const alarmModuleCheck = this.validateAlarmModule()
+      if (!alarmModuleCheck.valid) {
+        return {valid: false, field: 'alarmTableList', message: alarmModuleCheck.message}
+      }
+
       return {valid: true}
 
     },
@@ -434,9 +587,23 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         });
         return true;
       } else if (moduleName === 'alarm') {
-        // TODO: Implement alarm module table addition
-        // Alarm module may have different table structure
-        return false;
+        const module = this.alarm;
+        if (!module || module.tableList.length >= 100) {
+          return false;
+        }
+
+        module.tableList.push({
+          name: "",
+          sampleInterval: 1000,
+          nodeGroupType: NodeGroupType.SCALAR,
+          nodeList: Array.from({length: 10}, () => ({
+            name: "",
+            nodeId: "",
+            triggerType: TriggerType.RISING,
+            description: ""
+          }))
+        });
+        return true;
       } else if (moduleName === 'communication') {
         // TODO: Implement communication module table addition
         // Communication module may have different table structure
@@ -455,9 +622,13 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         module.tableList.splice(index, 1);
         return true;
       } else if (moduleName === 'alarm') {
-        // TODO: Implement alarm module table removal
-        // Alarm module may have different table structure and removal logic
-        return false;
+        const module = this.alarm;
+        if (!module || module.tableList.length <= 1) {
+          return false;
+        }
+
+        module.tableList.splice(index, 1);
+        return true;
       } else if (moduleName === 'communication') {
         // TODO: Implement communication module table removal
         // Communication module may have different table structure and removal logic
@@ -485,9 +656,23 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         });
         return true;
       } else if (moduleName === 'alarm') {
-        // TODO: Implement alarm module tag/node addition
-        // Alarm module may have different node structure
-        return false;
+        const module = this.alarm;
+        if (!module) {
+          return false;
+        }
+
+        const table = module.tableList[tableIndex];
+        if (!table || table.nodeList.length >= 100) {
+          return false;
+        }
+
+        table.nodeList.push({
+          name: "",
+          nodeId: "",
+          triggerType: TriggerType.RISING,
+          description: ""
+        });
+        return true;
       } else if (moduleName === 'communication') {
         // TODO: Implement communication module tag/node addition
         // Communication module may have different node structure
@@ -511,9 +696,18 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
         table.nodeList.splice(tagNameIndex, 1);
         return true;
       } else if (moduleName === 'alarm') {
-        // TODO: Implement alarm module tag/node removal
-        // Alarm module may have different node structure and removal logic
-        return false;
+        const module = this.alarm;
+        if (!module) {
+          return false;
+        }
+
+        const table = module.tableList[tableIndex];
+        if (!table || table.nodeList.length <= 1) {
+          return false;
+        }
+
+        table.nodeList.splice(tagNameIndex, 1);
+        return true;
       } else if (moduleName === 'communication') {
         // TODO: Implement communication module tag/node removal
         // Communication module may have different node structure and removal logic

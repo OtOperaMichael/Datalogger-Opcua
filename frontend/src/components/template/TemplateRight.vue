@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {ref, computed} from 'vue';
 import TabCustomModule from "@/components/template/tabs/TabCustomModule.vue";
+import TabAlarmModule from "@/components/template/tabs/TabAlarmModule.vue";
 import {message} from "ant-design-vue";
 
 const activeKeyCustomModule = ref('1');
+const activeKeyAlarmModule = ref('1');
 const outerActiveKey = ref('1');
 import {useNewTemplateStore} from "@/stores/useNewTemplateStore.ts";
 import request from "@/utils/request";
@@ -30,7 +32,15 @@ const isCustomEnabled = computed({
   }
 });
 
-// 计算属性：生成内部 tabs 列表
+// 是否启用告警数据采集
+const isAlarmEnabled = computed({
+  get: () => templateStore.alarm.enable,
+  set: (value) => {
+    templateStore.alarm.enable = value;
+  }
+});
+
+// 计算属性：生成内部 tabs 列表 - Custom Module
 const innerPanesCustomModule = computed(() => {
   return templateStore.custom.tableList.map((_, index) => ({
     key: String(index + 1),
@@ -40,7 +50,17 @@ const innerPanesCustomModule = computed(() => {
   }));
 });
 
-// 添加新 table
+// 计算属性：生成内部 tabs 列表 - Alarm Module
+const innerPanesAlarmModule = computed(() => {
+  return templateStore.alarm.tableList.map((_, index) => ({
+    key: String(index + 1),
+    title: `Group ${index + 1}`,
+    index: index,
+    closable: templateStore.alarm.tableList.length > 1
+  }));
+});
+
+// 添加新 table - Custom Module
 const addTableCustomModule = () => {
   if (templateStore.custom.tableList.length >= MAX_TABLE_COUNT.value) {
     message.warning(`Maximum number of tables ${MAX_TABLE_COUNT.value} reached'`);
@@ -52,7 +72,7 @@ const addTableCustomModule = () => {
   templateStore.addTable("custom");
 };
 
-// 删除 table
+// 删除 table - Custom Module
 const removeTableCustomModule = (targetKey: string) => {
   if (templateStore.custom.tableList.length <= 1) {
     message.warning('At least one table must exist');
@@ -81,17 +101,72 @@ const removeTableCustomModule = (targetKey: string) => {
   }
 };
 
-// 处理编辑事件
+// 处理编辑事件 - Custom Module
 const onInnerEditCustomModule = (targetKey: string | MouseEvent, action: string) => {
   if (!loginUserStore.getIsLoggedIn) {
     message.warning('Please log in first to modify the template.');
-    return; // 直接返回，不执行后续操作
+    return;
   }
 
   if (action === 'add') {
     addTableCustomModule();
   } else {
     removeTableCustomModule(targetKey as string);
+  }
+};
+
+// 添加新 table - Alarm Module
+const addTableAlarmModule = () => {
+  if (templateStore.alarm.tableList.length >= MAX_TABLE_COUNT.value) {
+    message.warning(`Maximum number of tables ${MAX_TABLE_COUNT.value} reached'`);
+    return;
+  }
+
+  const newKey = String(templateStore.alarm.tableList.length + 1);
+  activeKeyAlarmModule.value = newKey;
+  templateStore.addTable("alarm");
+};
+
+// 删除 table - Alarm Module
+const removeTableAlarmModule = (targetKey: string) => {
+  if (templateStore.alarm.tableList.length <= 1) {
+    message.warning('At least one table must exist');
+    return;
+  }
+
+  const targetIndex = parseInt(targetKey) - 1;
+
+  let lastIndex = 0;
+  innerPanesAlarmModule.value.forEach((pane, i) => {
+    if (pane.key === targetKey) {
+      lastIndex = i - 1;
+    }
+  });
+
+  templateStore.removeTable("alarm", targetIndex);
+
+  if (templateStore.alarm.tableList.length && activeKeyAlarmModule.value === targetKey) {
+    if (lastIndex >= 0) {
+      activeKeyAlarmModule.value = String(lastIndex + 1);
+    } else {
+      activeKeyAlarmModule.value = '1';
+    }
+  } else if (targetIndex < parseInt(activeKeyAlarmModule.value) - 1) {
+    activeKeyAlarmModule.value = String(parseInt(activeKeyAlarmModule.value) - 1);
+  }
+};
+
+// 处理编辑事件 - Alarm Module
+const onInnerEditAlarmModule = (targetKey: string | MouseEvent, action: string) => {
+  if (!loginUserStore.getIsLoggedIn) {
+    message.warning('Please log in first to modify the template.');
+    return;
+  }
+
+  if (action === 'add') {
+    addTableAlarmModule();
+  } else {
+    removeTableAlarmModule(targetKey as string);
   }
 };
 
@@ -213,8 +288,31 @@ async function saveTemplate() {
           </a-tab-pane>
 
           <!--module 2: alarm collecting-->
-          <a-tab-pane key="2" tab="Alarm">
-
+          <a-tab-pane key="2">
+            <template #tab>
+              <span>
+                <a-checkbox
+                  :disabled="!loginUserStore.getIsLoggedIn"
+                  v-model:checked="isAlarmEnabled"
+                  @click.stop style="margin-right: 8px;"
+                />
+                Alarm
+              </span>
+            </template>
+            <a-tabs
+              v-model:activeKey="activeKeyAlarmModule"
+              type="editable-card"
+              @edit="onInnerEditAlarmModule"
+            >
+              <a-tab-pane
+                v-for="pane in innerPanesAlarmModule"
+                :key="pane.key"
+                :tab="pane.title"
+                :closable="pane.closable"
+              >
+                <TabAlarmModule :table-index="pane.index"/>
+              </a-tab-pane>
+            </a-tabs>
           </a-tab-pane>
 
           <!--module 3: communication logger-->
