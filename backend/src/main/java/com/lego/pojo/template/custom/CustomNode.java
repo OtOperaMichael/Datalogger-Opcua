@@ -1,6 +1,5 @@
-package com.lego.pojo.template.alarm;
+package com.lego.pojo.template.custom;
 
-import com.lego.pojo.template.custom.DataType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,10 +17,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class Node {
+public class CustomNode {
    private String  name;
    private String nodeId;
-   private TriggerType triggerType;
-   private String description;
+   private DataType dataType;
 
 }

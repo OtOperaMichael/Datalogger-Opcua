@@ -1,4 +1,4 @@
-package com.lego.pojo.template.custom;
+package com.lego.pojo.template;
 
 /**
  * ClassName: NodeType

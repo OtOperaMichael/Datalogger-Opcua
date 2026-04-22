@@ -1,6 +1,7 @@
 package com.lego.pojo.template.communication;
 
 import com.lego.pojo.template.BaseModule;
+import com.lego.pojo.template.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,9 +21,9 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class CommModule implements BaseModule<Table> {
+public class CommModule implements BaseModule<Table<CommNode>> {
 
     private boolean enable;
-    private List<Table> tableList;
+    private List<Table<CommNode>> tableList;
 
 }

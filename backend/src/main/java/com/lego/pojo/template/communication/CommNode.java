@@ -4,26 +4,22 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 /**
- * ClassName: Table
- * Package: lego.pojo
+ * ClassName: Node
+ * Package: com.lego.pojo.template.custom
  * Description:
  *
  * @Author michael.zhu
- * @Create 2026/2/10 10:22
+ * @Create 4/15/2026 2:39 PM
  * @Version 1.0
  */
 
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class Table {
+public class CommNode {
+   private String  name;
+   private String nodeId;
 
-    private String name;
-    private Integer sampleInterval;
-    private NodeGroupType nodeGroupType;
-    private List<Node> nodeList;
 
 }

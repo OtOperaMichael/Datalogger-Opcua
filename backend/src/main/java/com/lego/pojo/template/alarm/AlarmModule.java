@@ -1,6 +1,7 @@
 package com.lego.pojo.template.alarm;
 
 import com.lego.pojo.template.BaseModule;
+import com.lego.pojo.template.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,9 +21,9 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class AlarmModule implements BaseModule<Table> {
+public class AlarmModule implements BaseModule<Table<AlarmNode>> {
 
     private boolean enable;
-    private List<Table> tableList;
+    private List<Table<AlarmNode>> tableList;
 
 }

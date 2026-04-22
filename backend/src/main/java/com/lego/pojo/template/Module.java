@@ -1,25 +1,27 @@
-package com.lego.pojo.template.custom;
+package com.lego.pojo.template;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
- * ClassName: Node
+ * ClassName: Module
  * Package: com.lego.pojo.template.custom
  * Description:
  *
  * @Author michael.zhu
- * @Create 4/15/2026 2:39 PM
+ * @Create 4/15/2026 2:43 PM
  * @Version 1.0
  */
 
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class Node {
-   private String  name;
-   private String nodeId;
-   private DataType dataType;
+public class Module<T> {
+
+    private boolean enable;
+    private List<T> tableList;
 
 }

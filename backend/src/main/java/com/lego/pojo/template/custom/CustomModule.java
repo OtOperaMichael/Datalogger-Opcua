@@ -1,6 +1,7 @@
 package com.lego.pojo.template.custom;
 
 import com.lego.pojo.template.BaseModule;
+import com.lego.pojo.template.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,9 +21,9 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class CustomModule implements BaseModule<Table> {
+public class CustomModule implements BaseModule<Table<CustomNode>> {
 
     private boolean enable;
-    private List<Table> tableList;
+    private List<Table<CustomNode>> tableList;
 
 }

@@ -1,4 +1,4 @@
-package com.lego.pojo.template.communication;
+package com.lego.pojo.template.alarm;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -17,9 +17,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class Node {
+public class AlarmNode {
    private String  name;
    private String nodeId;
-
+   private TriggerType triggerType;
+   private String description;
 
 }

@@ -1,4 +1,4 @@
-package com.lego.pojo.template.custom;
+package com.lego.pojo.template;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -19,11 +19,11 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class Table {
+public class Table<T> {
 
     private String name;
     private Integer sampleInterval;
     private NodeGroupType nodeGroupType;
-    private List<Node> nodeList;
+    private List<T> nodeList;
 
 }
