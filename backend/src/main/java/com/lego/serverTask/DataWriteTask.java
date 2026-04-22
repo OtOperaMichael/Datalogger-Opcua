@@ -32,4 +32,16 @@ public class DataWriteTask {
         this.data = data;
         this.timestamp = Instant.now();
     }
+
+    //重写toString方法
+
+    @Override
+    public String toString() {
+        return "DataWriteTask{" +
+                "serverName='" + serverName + '\'' +
+                ", tableName='" + tableName + '\'' +
+                ", timestamp=" + timestamp +
+                ", data=" + data +
+                '}';
+    }
 }

@@ -215,6 +215,8 @@ public class DataConsumerPool {
                 return;
             }
 
+            LogUtil.logDebugL1(false, "app", "dequeue DataWriteTask: {}", firstTask);
+
             // 获取到第一个数据
             batch.add(firstTask);
 

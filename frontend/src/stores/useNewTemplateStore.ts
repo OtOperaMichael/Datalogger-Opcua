@@ -419,9 +419,9 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
             errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Invalid trigger type. Must be RISING or FALLING`)
           }
 
-          // description 可以为空，但如果非空则不能包含空格
-          if (node.description && /\s/.test(node.description)) {
-            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Description cannot contain spaces or whitespace`)
+          // description 可以为空，但如果非空则不能以空格开头
+          if (node.description && /^\s/.test(node.description)) {
+            errors.push(`Alarm Table ${index + 1}, Node ${i + 1}: Description cannot start with spaces or whitespace`)
           }
         }
 
