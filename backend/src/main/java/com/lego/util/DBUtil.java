@@ -203,12 +203,12 @@ public class DBUtil {
             }
         } else if (nodeGroup.getModuleType() == ModuleType.ALARM) {
             // Alarm module columns: id + time + alarm_name + start_time + end_time + duration_seconds + device_name + description
-            columns .append("alarm_name TEXT NOT NULL, ")
+            columns.append("alarm_name TEXT NOT NULL, ")
                     .append("start_time TIMESTAMP NOT NULL, ")
-                   .append("end_time TIMESTAMP NOT NULL, ")
-                   .append("duration INTEGER NOT NULL, ")
-                   .append("device TEXT NOT NULL, ")
-                   .append("description TEXT");
+                    .append("end_time TIMESTAMP NOT NULL, ")
+                    .append("duration INTEGER NOT NULL, ")
+                    .append("device TEXT NOT NULL, ")
+                    .append("description TEXT");
         }
 
         String sql = "CREATE TABLE IF NOT EXISTS " + fullTableName +
@@ -230,19 +230,25 @@ public class DBUtil {
     /**
      * 创建 hyper 表，存储时序数据
      */
-    public static void createHyperTable(String schemaName, CustomOpcUaNodeGroup nodeGroup) {
+    public static void createHyperTable(String schemaName, OpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
         String safeTableName = sanitizeIdentifier(nodeGroup.getFullTableName());
         String fullTableName = safeDbName + "." + safeTableName;
 
         StringBuilder columns = new StringBuilder();
-        for (OpcUaNode node : nodeGroup.getNodeList()) {
-            String safeColName = sanitizeIdentifier(node.getName());
-            String sqlType = mapDataTypeToSql(node.getDataType());
-            columns.append(safeColName).append(" ").append(sqlType).append(" NOT NULL, ");
-        }
-        if (columns.length() > 0) {
-            columns.setLength(columns.length() - 2);
+
+        if (nodeGroup.getModuleType() == ModuleType.CUSTOM) {
+            for (OpcUaNode node : nodeGroup.getNodeList()) {
+                String safeColName = sanitizeIdentifier(node.getName());
+                String sqlType = mapDataTypeToSql(node.getDataType());
+                columns.append(safeColName).append(" ").append(sqlType).append(" NOT NULL, ");
+            }
+            if (columns.length() > 0) {
+                columns.setLength(columns.length() - 2);
+            }
+        }else if (nodeGroup.getModuleType() == ModuleType.COMMUNICATION) {
+            // Communication module columns: message_type + direction + message_content
+            columns.append("message TEXT NOT NULL");
         }
 
         String sql = "CREATE TABLE IF NOT EXISTS " + fullTableName +
@@ -910,9 +916,9 @@ public class DBUtil {
      * Query alarm data grouped by trigger times (top times)
      *
      * @param schemaName schema name
-     * @param tableName table name (should be "alarm_history")
-     * @param startTime start time
-     * @param endTime end time
+     * @param tableName  table name (should be "alarm_history")
+     * @param startTime  start time
+     * @param endTime    end time
      * @return list of maps containing alarm statistics grouped by alarm_name and device
      */
     public static List<Map<String, Object>> queryAlarmByTopTimes(String schemaName, String tableName, String startTime, String endTime) {
@@ -955,9 +961,9 @@ public class DBUtil {
      * Query alarm data grouped by total duration (top duration)
      *
      * @param schemaName schema name
-     * @param tableName table name (should be "alarm_history")
-     * @param startTime start time
-     * @param endTime end time
+     * @param tableName  table name (should be "alarm_history")
+     * @param startTime  start time
+     * @param endTime    end time
      * @return list of maps containing alarm statistics grouped by alarm_name and device
      */
     public static List<Map<String, Object>> queryAlarmByTopDuration(String schemaName, String tableName, String startTime, String endTime) {

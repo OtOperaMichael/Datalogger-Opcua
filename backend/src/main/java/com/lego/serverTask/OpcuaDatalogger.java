@@ -5,10 +5,10 @@ import com.lego.pojo.template.NodeGroupType;
 import com.lego.pojo.Server;
 import com.lego.pojo.template.Table;
 import com.lego.pojo.template.Template;
-import com.lego.serverTask.protocols.opcua.AlarmOpcUaNodeGroup;
-import com.lego.serverTask.protocols.opcua.OpcUaNode;
-import com.lego.serverTask.protocols.opcua.CustomOpcUaNodeGroup;
-import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
+import com.lego.pojo.template.alarm.AlarmNode;
+import com.lego.pojo.template.communication.CommNode;
+import com.lego.pojo.template.custom.CustomNode;
+import com.lego.serverTask.protocols.opcua.*;
 import com.lego.util.DBUtil;
 import com.lego.util.LogUtil;
 import com.lego.util.TemplateUtil;
@@ -52,7 +52,7 @@ public class OpcuaDatalogger {
 
     private final ArrayList<CustomOpcUaNodeGroup> customModuleNodeGroupList = new ArrayList<>();
     private final ArrayList<AlarmOpcUaNodeGroup> alarmModuleNodeGroupList = new ArrayList<>();
-    private final ArrayList<CustomOpcUaNodeGroup> commModuleNodeGroupList = new ArrayList<>();
+    private final ArrayList<CommOpcUaNodeGroup> commModuleNodeGroupList = new ArrayList<>();
 
     // 引用全局队列
     private final GlobalDataQueue globalDataQueue;
@@ -108,7 +108,7 @@ public class OpcuaDatalogger {
 
             for (int index = 0; index < template.getCustom().getTableList().size(); index++) {
 
-                Table table = template.getCustom().getTableList().get(index);
+                Table<CustomNode> table = template.getCustom().getTableList().get(index);
                 //从前端传来的tagGroup有可能为空，为空则跳过
                 if (!table.getName().isEmpty()) {
                     CustomOpcUaNodeGroup nodeGroup = new CustomOpcUaNodeGroup(serverName, ModuleType.CUSTOM, table);
@@ -128,7 +128,7 @@ public class OpcuaDatalogger {
 
             for (int index = 0; index < template.getAlarm().getTableList().size(); index++) {
 
-                Table table = template.getAlarm().getTableList().get(index);
+                Table<AlarmNode> table = template.getAlarm().getTableList().get(index);
                 //从前端传来的tagGroup有可能为空，为空则跳过
                 if (!table.getName().isEmpty()) {
                     AlarmOpcUaNodeGroup nodeGroup = new AlarmOpcUaNodeGroup(serverName, ModuleType.ALARM, table);
@@ -145,7 +145,26 @@ public class OpcuaDatalogger {
         }
 
         //Module3: communication
+        if (communicationModuleIsEnabled) {
 
+            for (int index = 0; index < template.getCommunication().getTableList().size(); index++) {
+
+                Table<CommNode> table = template.getCommunication().getTableList().get(index);
+                //从前端传来的tagGroup有可能为空，为空则跳过
+                if (!table.getName().isEmpty()) {
+                    CommOpcUaNodeGroup nodeGroup = new CommOpcUaNodeGroup(serverName, ModuleType.COMMUNICATION, table);
+                    commModuleNodeGroupList.add(nodeGroup);
+
+                } else {
+                    break;
+                }
+
+            }
+
+        }
+
+        //create table, hyper, one single table for alarm module, called "alarm_history"
+        DBUtil.createHyperTable(serverName, commModuleNodeGroupList.get(0));
 
     }
 
@@ -205,6 +224,12 @@ public class OpcuaDatalogger {
 
             if (alarmModuleIsEnabled) {
                 for (AlarmOpcUaNodeGroup nodeGroup : alarmModuleNodeGroupList) {
+                    createSubscriptionForNodeGroup(client, nodeGroup);
+                }
+            }
+
+            if (communicationModuleIsEnabled) {
+                for (CommOpcUaNodeGroup nodeGroup : commModuleNodeGroupList) {
                     createSubscriptionForNodeGroup(client, nodeGroup);
                 }
             }
@@ -304,6 +329,13 @@ public class OpcuaDatalogger {
                 int size = alarmModuleNodeGroupList.size();
                 alarmModuleNodeGroupList.clear();
                 LogUtil.logInfo(true, serverName, "Cleared {} node groups from local cache of alarm module", size);
+            }
+        }
+        if (communicationModuleIsEnabled) {
+            if (!commModuleNodeGroupList.isEmpty()) {
+                int size = commModuleNodeGroupList.size();
+                commModuleNodeGroupList.clear();
+                LogUtil.logInfo(true, serverName, "Cleared {} node groups from local cache of communication module", size);
             }
         }
 
@@ -444,6 +476,18 @@ public class OpcuaDatalogger {
                     if (success) {
                         LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
                                 ModuleType.ALARM.toString(), groupName, nodeGroup.getNodeList().size());
+                    }
+                }
+
+                if (nodeGroup.getModuleType() == ModuleType.COMMUNICATION) {
+                    // 将数据入队
+                    boolean success = globalDataQueue.enqueueCommunicationData(serverName, (CommOpcUaNodeGroup) nodeGroup);
+
+                    if (success) {
+                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+                                ModuleType.COMMUNICATION.toString(), groupName, nodeGroup.getNodeList().size());
+                    } else {
+                        LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {}_{} - queue may be full", ModuleType.COMMUNICATION.toString(), groupName);
                     }
                 }
             }

@@ -13,6 +13,7 @@ package com.lego.serverTask;
 
 import com.lego.serverTask.protocols.opcua.AlarmOpcUaNode;
 import com.lego.serverTask.protocols.opcua.AlarmOpcUaNodeGroup;
+import com.lego.serverTask.protocols.opcua.CommOpcUaNodeGroup;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
 import com.lego.serverTask.protocols.opcua.CustomOpcUaNodeGroup;
 import com.lego.util.LogUtil;
@@ -158,7 +159,7 @@ public class GlobalDataQueue {
                         // 队列已满
                         LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}",
                                 serverName, dataQueue.size());
-                    }else{
+                    } else {
                         LogUtil.logDebugL1(false, "app", "enqueue alarm data: {}", task.toString());
                     }
 
@@ -176,6 +177,50 @@ public class GlobalDataQueue {
         }
 
         return success;
+    }
+
+    /**
+     * 添加communication监控数据到队列（OPC UA 数据）
+     * Communication module 记录通信消息的原始数据
+     */
+    public boolean enqueueCommunicationData(String serverName, CommOpcUaNodeGroup nodeGroup) {
+        boolean success = false;
+        try {
+            String tableName = nodeGroup.getFullTableName();
+
+            // 遍历 nodeGroup 中的所有节点，提取数据
+            for (OpcUaNode node : nodeGroup.getNodeList()) {
+                LinkedHashMap<String, Object> data = new LinkedHashMap<>();
+                Object newValue = node.getNewValue();
+                Object oldValue = node.getOldValue();
+
+                // 只添加非 null 的值
+                if (newValue != null) {
+                    // Communication nodes store message content as string
+                    String message = "node: [" + node.getName() + "] value changed from " + oldValue + " to " + newValue;
+                    data.put("message", message);
+                }
+
+                DataWriteTask task = new DataWriteTask(serverName, tableName, data);
+                success = dataQueue.offer(task);
+
+                if (!success) {
+                    // 队列已满
+                    LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}",
+                            serverName, dataQueue.size());
+                } else {
+                    LogUtil.logDebugL1(false, "app", "enqueue communication data: {}", task.toString());
+                }
+
+            }
+        } catch (Exception e) {
+            LogUtil.logError(true, "app", "Failed to enqueue communication data for server {}: {}",
+                    serverName, e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+        return success;
+
     }
 
 
