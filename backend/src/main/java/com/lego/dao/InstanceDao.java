@@ -16,4 +16,8 @@ public interface InstanceDao {
     List<Map<String, Object>> queryFromDatabase(String serverName, String tableName, String startTime, String endTime);
 
     List<String> queryLogs(String lineId, int days);
+
+    List<Map<String, Object>> queryAlarmByTopTimes(String serverName, String tableName, String startTime, String endTime);
+
+    List<Map<String, Object>> queryAlarmByTopDuration(String serverName, String tableName, String startTime, String endTime);
 }

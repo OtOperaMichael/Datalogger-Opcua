@@ -11,8 +11,10 @@ package com.lego.serverTask;
  */
 
 
+import com.lego.serverTask.protocols.opcua.AlarmOpcUaNode;
+import com.lego.serverTask.protocols.opcua.AlarmOpcUaNodeGroup;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
-import com.lego.serverTask.protocols.opcua.CustomNodeGroup;
+import com.lego.serverTask.protocols.opcua.CustomOpcUaNodeGroup;
 import com.lego.util.LogUtil;
 import com.lego.util.ThreadDiagnosticUtil;
 
@@ -92,7 +94,7 @@ public class GlobalDataQueue {
      * 添加custom监控数据到队列（OPC UA 数据）
      * 根据节点的实际数据类型保持原始类型
      */
-    public boolean enqueueCustomData(String serverName, CustomNodeGroup nodeGroup) {
+    public boolean enqueueCustomData(String serverName, CustomOpcUaNodeGroup nodeGroup) {
         try {
             String tableName = nodeGroup.getFullTableName();
             LinkedHashMap<String, Object> data = new LinkedHashMap<>();
@@ -123,6 +125,57 @@ public class GlobalDataQueue {
             e.printStackTrace();
             return false;
         }
+    }
+
+    /**
+     * 添加alarm监控数据到队列（OPC UA 数据）
+     * 根据节点的实际数据类型保持原始类型
+     */
+    public boolean enqueueAlarmData(String serverName, AlarmOpcUaNodeGroup nodeGroup) {
+        boolean success = false;
+        try {
+            String tableName = nodeGroup.getFullTableName();
+
+
+            // 遍历 nodeGroup 中的所有节点，提取数据并保持原始类型
+            for (OpcUaNode node : nodeGroup.getNodeList()) {
+                AlarmOpcUaNode alarmNode = (AlarmOpcUaNode) node;
+                LinkedHashMap<String, Object> data = new LinkedHashMap<>();
+
+                //  如果alarm数据ready
+                if (alarmNode.isNewRecord()) {
+                    data.put("alarm_name", alarmNode.getName());
+                    data.put("start_time", alarmNode.getStartTime());
+                    data.put("end_time", alarmNode.getEndTime());
+                    data.put("duration", alarmNode.getDuration());
+                    data.put("device", alarmNode.getDeviceName());
+                    data.put("description", alarmNode.getDescription());
+
+                    DataWriteTask task = new DataWriteTask(serverName, tableName, data);
+                    success = dataQueue.offer(task);
+
+                    if (!success) {
+                        // 队列已满
+                        LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}",
+                                serverName, dataQueue.size());
+                    }else{
+                        LogUtil.logDebugL1(false, "app", "enqueue alarm data: {}", task.toString());
+                    }
+
+                    // reset data
+                    alarmNode.reset();
+
+                }
+
+            }
+        } catch (Exception e) {
+            LogUtil.logError(true, "app", "Failed to enqueue OPC UA data for server {}: {}",
+                    serverName, e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+
+        return success;
     }
 
 

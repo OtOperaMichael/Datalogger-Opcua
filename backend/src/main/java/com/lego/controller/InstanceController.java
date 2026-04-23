@@ -1,5 +1,6 @@
 package com.lego.controller;
 
+import com.lego.pojo.template.Table;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,7 +10,6 @@ import com.lego.common.ResultCodeEnum;
 import com.lego.pojo.QueryLoad;
 import com.lego.pojo.Server;
 import com.lego.pojo.template.BaseModule;
-import com.lego.pojo.template.custom.Table;
 import com.lego.pojo.template.Template;
 import com.lego.service.Impl.InstanceServiceImpl;
 import com.lego.service.Impl.ServerServiceImpl;
@@ -97,13 +97,13 @@ public class InstanceController extends BaseController {
             return;
         }
 
-        // 在对应模块的 tablelist 中查找表信息
-        Table table = findTableInModule(module, queryLoad.getTableName());
-
-        if (table == null) {
-            WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
-            return;
-        }
+//        // 在对应模块的 tablelist 中查找表信息
+//        Table table = findTableInModule(module, queryLoad.getTableName());
+//
+//        if (table == null) {
+//            WebUtil.writeJson(resp, Result.build(null, ResultCodeEnum.FAILURE));
+//            return;
+//        }
         
         //调用 service查询
         List<Map<String, Object>> results = instanceService.query(queryLoad);

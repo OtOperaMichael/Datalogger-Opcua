@@ -33,4 +33,20 @@ public class InstanceDaoImpl implements InstanceDao {
         results = DBUtil.queryLogs(schemaName, days);
         return results;
     }
+
+    @Override
+    public List<Map<String, Object>> queryAlarmByTopTimes(String serverName, String tableName, String startTime, String endTime) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        results = DBUtil.queryAlarmByTopTimes(serverName, tableName, startTime, endTime);
+
+        return results;
+    }
+
+    @Override
+    public List<Map<String, Object>> queryAlarmByTopDuration(String serverName, String tableName, String startTime, String endTime) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        results = DBUtil.queryAlarmByTopDuration(serverName, tableName, startTime, endTime);
+
+        return results;
+    }
 }

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import {useSelectedServerStore} from "@/stores/useSelectedServerStore.ts";
 import {useTemplateListStore} from "@/stores/useTemplateListStore.ts";
-import type {TemplateInterface, CustomTableInterface, CustomModuleInterface, ModuleType} from "@/types/template.ts";
+import type {
+  TemplateInterface,
+  CustomTableInterface,
+  CustomModuleInterface,
+  AlarmModuleInterface,
+  CommModuleInterface,
+  ModuleType
+} from "@/types/template.ts";
 import {ref, computed, watch} from 'vue';
 import {message} from 'ant-design-vue';
 import request from "@/utils/request.ts";
@@ -17,6 +24,17 @@ const templateListStore = useTemplateListStore();
 const template = computed(() => {
   return templateListStore.getTemplateByName(serverStore.templateName);
 });
+
+// Common module interface for all module types
+interface BaseModuleInterface {
+  enable: boolean;
+  tableList: Array<{
+    name: string;
+    sampleInterval: number;
+    nodeGroupType: any;
+    nodeList: any[];
+  }>;
+}
 
 // Module name mapping (string to enum and display label)
 const moduleConfig = [
@@ -43,7 +61,7 @@ const availableModules = computed(() => {
   if (!template.value) return [];
 
   return moduleConfig.filter(config => {
-    const module = template.value?.[config.key] as CustomModuleInterface | undefined;
+    const module = template.value?.[config.key] as BaseModuleInterface | undefined;
     return module?.enable;
   }).map(config => ({
     value: config.value,
@@ -58,10 +76,27 @@ const availableTables = computed(() => {
   const config = moduleConfig.find(c => c.value === queryForm.value.selectedModule);
   if (!config) return [];
 
-  const module = template.value?.[config.key] as CustomModuleInterface | undefined;
-  if (!module?.tableList) return [];
+  // Handle different module types with different table lists
+  if (queryForm.value.selectedModule === 'custom') {
+    // Custom module: get tables from template
+    const module = template.value?.[config.key] as CustomModuleInterface | undefined;
+    if (!module?.tableList) return [];
+    return module.tableList.filter((table: CustomTableInterface) => table.name && table.name.trim() !== '');
+  } else if (queryForm.value.selectedModule === 'alarm') {
+    // Alarm module: fixed table list
+    return [
+      { name: 'raw' },
+      { name: 'top times' },
+      { name: 'top duration' }
+    ];
+  } else if (queryForm.value.selectedModule === 'communication') {
+    // Communication module: only raw table
+    return [
+      { name: 'raw' }
+    ];
+  }
 
-  return module.tableList.filter((table: CustomTableInterface) => table.name && table.name.trim() !== '');
+  return [];
 });
 
 // Reset form when server changes
@@ -126,7 +161,7 @@ async function executeQuery() {
   loading.value = true;
   try {
     // Find the selected table to determine database type
-    const selectedTable = availableTables.value.find((t: CustomTableInterface) => t.name === queryForm.value.selectedTable);
+    const selectedTable = availableTables.value.find((t: any) => t.name === queryForm.value.selectedTable);
     if (!selectedTable) {
       throw new Error('Selected table not found');
     }
@@ -234,8 +269,22 @@ const paginationConfig = computed(() => ({
 
 // 添加辅助函数
 function isDateKey(key: string | number): boolean {
-  const keyStr = String(key);
-  return keyStr.toLowerCase().includes('time') || keyStr.toLowerCase().includes('date');
+  const keyStr = String(key).toLowerCase();
+
+  // 排除统计字段（这些字段虽然包含 'time' 但不是时间类型）
+  const excludeKeywords = ['trigger_times', 'total_duration', 'avg_duration', 'max_duration'];
+  for (const exclude of excludeKeywords) {
+    if (keyStr.includes(exclude)) {
+      return false;
+    }
+  }
+
+  // 只将明确的时间字段识别为日期
+  return keyStr === 'time' ||
+         keyStr === 'start_time' ||
+         keyStr === 'end_time' ||
+         keyStr.includes('_timestamp') ||
+         (keyStr.includes('time') && !keyStr.includes('_times'));
 }
 
 </script>
@@ -265,7 +314,7 @@ function isDateKey(key: string | number): boolean {
           <a-select
             v-model:value="queryForm.selectedTable"
             placeholder="Choose a table"
-            :options="availableTables.map((table: CustomTableInterface) => ({ value: table.name, label: table.name }))"
+            :options="availableTables.map((table: any) => ({ value: table.name, label: table.name }))"
             allow-clear
             :disabled="!queryForm.selectedModule"
             style="min-width: 180px; width: 200px;"

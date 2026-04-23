@@ -1,13 +1,14 @@
 package com.lego.serverTask;
 
 import com.lego.pojo.template.ModuleType;
-import com.lego.pojo.template.custom.NodeGroupType;
-import com.lego.pojo.template.custom.Table;
+import com.lego.pojo.template.NodeGroupType;
 import com.lego.pojo.Server;
+import com.lego.pojo.template.Table;
 import com.lego.pojo.template.Template;
-import com.lego.serverTask.protocols.opcua.AlarmNodeGroup;
+import com.lego.serverTask.protocols.opcua.AlarmOpcUaNodeGroup;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
-import com.lego.serverTask.protocols.opcua.CustomNodeGroup;
+import com.lego.serverTask.protocols.opcua.CustomOpcUaNodeGroup;
+import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 import com.lego.util.DBUtil;
 import com.lego.util.LogUtil;
 import com.lego.util.TemplateUtil;
@@ -49,9 +50,9 @@ public class OpcuaDatalogger {
     private final boolean alarmModuleIsEnabled;
     private final boolean communicationModuleIsEnabled;
 
-    private final ArrayList<CustomNodeGroup> customModuleNodeGroupList = new ArrayList<>();
-    private final ArrayList<AlarmNodeGroup> alarmModuleNodeGroupList = new ArrayList<>();
-    private final ArrayList<CustomNodeGroup> commModuleNodeGroupList = new ArrayList<>();
+    private final ArrayList<CustomOpcUaNodeGroup> customModuleNodeGroupList = new ArrayList<>();
+    private final ArrayList<AlarmOpcUaNodeGroup> alarmModuleNodeGroupList = new ArrayList<>();
+    private final ArrayList<CustomOpcUaNodeGroup> commModuleNodeGroupList = new ArrayList<>();
 
     // 引用全局队列
     private final GlobalDataQueue globalDataQueue;
@@ -110,7 +111,7 @@ public class OpcuaDatalogger {
                 Table table = template.getCustom().getTableList().get(index);
                 //从前端传来的tagGroup有可能为空，为空则跳过
                 if (!table.getName().isEmpty()) {
-                    CustomNodeGroup nodeGroup = new CustomNodeGroup(serverName, ModuleType.CUSTOM, table);
+                    CustomOpcUaNodeGroup nodeGroup = new CustomOpcUaNodeGroup(serverName, ModuleType.CUSTOM, table);
                     customModuleNodeGroupList.add(nodeGroup);
                     //create hyper table for each tagGroup
                     DBUtil.createHyperTable(serverName, nodeGroup);
@@ -127,10 +128,10 @@ public class OpcuaDatalogger {
 
             for (int index = 0; index < template.getAlarm().getTableList().size(); index++) {
 
-                Table table = template.getCustom().getTableList().get(index);
+                Table table = template.getAlarm().getTableList().get(index);
                 //从前端传来的tagGroup有可能为空，为空则跳过
                 if (!table.getName().isEmpty()) {
-                    AlarmNodeGroup nodeGroup = new AlarmNodeGroup(serverName, ModuleType.ALARM, table);
+                    AlarmOpcUaNodeGroup nodeGroup = new AlarmOpcUaNodeGroup(serverName, ModuleType.ALARM, table);
                     alarmModuleNodeGroupList.add(nodeGroup);
 
                 } else {
@@ -151,7 +152,7 @@ public class OpcuaDatalogger {
     /**
      * 启动 OPC UA 连接和订阅
      */
-    public void start()  {
+    public void start() {
 
         // 检查是否已经在运行
         if (isRunning) {
@@ -174,10 +175,10 @@ public class OpcuaDatalogger {
 
             String endpointUrl = endpoint.getEndpointUrl();
             LogUtil.logInfo(true, serverName, "Original endpoint URL from server: {}", endpointUrl);
-            
+
             String fixedEndpointUrl = fixEndpointUrl(endpointUrl, serverUrl);
             LogUtil.logInfo(true, serverName, "Fixed endpoint URL: {}", fixedEndpointUrl);
-            
+
             EndpointDescription fixedEndpoint = new EndpointDescription(
                     fixedEndpointUrl,
                     endpoint.getServer(),
@@ -197,7 +198,13 @@ public class OpcuaDatalogger {
 
             // 创建订阅
             if (customModuleIsEnabled) {
-                for (CustomNodeGroup nodeGroup : customModuleNodeGroupList) {
+                for (CustomOpcUaNodeGroup nodeGroup : customModuleNodeGroupList) {
+                    createSubscriptionForNodeGroup(client, nodeGroup);
+                }
+            }
+
+            if (alarmModuleIsEnabled) {
+                for (AlarmOpcUaNodeGroup nodeGroup : alarmModuleNodeGroupList) {
                     createSubscriptionForNodeGroup(client, nodeGroup);
                 }
             }
@@ -209,7 +216,7 @@ public class OpcuaDatalogger {
             isRunning = false;
             // 启动失败，记录日志并抛出异常
             LogUtil.logError(true, serverName, "Failed to start server: {}", e.getMessage());
-           e.printStackTrace();
+            e.printStackTrace();
         }
     }
 
@@ -217,16 +224,16 @@ public class OpcuaDatalogger {
         try {
             java.net.URI originalUri = new java.net.URI(originalUrl.replace("opc.tcp://", "http://"));
             java.net.URI endpointUri = new java.net.URI(endpointUrl.replace("opc.tcp://", "http://"));
-            
+
             String originalHost = originalUri.getHost();
             String endpointHost = endpointUri.getHost();
-            
+
             if (originalHost != null && endpointHost != null && !originalHost.equals(endpointHost)) {
                 LogUtil.logInfo(true, serverName, "Replacing endpoint host '{}' with '{}'", endpointHost, originalHost);
-                
+
                 int port = endpointUri.getPort();
                 String path = endpointUri.getPath();
-                
+
                 String fixedUrl = "opc.tcp://" + originalHost;
                 if (port > 0) {
                     fixedUrl += ":" + port;
@@ -234,13 +241,13 @@ public class OpcuaDatalogger {
                 if (path != null && !path.isEmpty()) {
                     fixedUrl += path;
                 }
-                
+
                 return fixedUrl;
             }
         } catch (Exception e) {
             LogUtil.logWarning(true, serverName, "Failed to parse URLs, using original endpoint: {}", e.getMessage());
         }
-        
+
         return endpointUrl;
     }
 
@@ -285,10 +292,19 @@ public class OpcuaDatalogger {
         }
 
         // 3. 清空 nodeGroup 列表
-        if (!customModuleNodeGroupList.isEmpty()) {
-            int size = customModuleNodeGroupList.size();
-            customModuleNodeGroupList.clear();
-            LogUtil.logInfo(true, serverName, "Cleared {} node groups from local cache", size);
+        if (customModuleIsEnabled) {
+            if (!customModuleNodeGroupList.isEmpty()) {
+                int size = customModuleNodeGroupList.size();
+                customModuleNodeGroupList.clear();
+                LogUtil.logInfo(true, serverName, "Cleared {} node groups from local cache of custom module", size);
+            }
+        }
+        if (alarmModuleIsEnabled) {
+            if (!alarmModuleNodeGroupList.isEmpty()) {
+                int size = alarmModuleNodeGroupList.size();
+                alarmModuleNodeGroupList.clear();
+                LogUtil.logInfo(true, serverName, "Cleared {} node groups from local cache of alarm module", size);
+            }
         }
 
         LogUtil.logInfo(true, serverName, "Shutdown process completed for server: {}", serverName);
@@ -300,10 +316,12 @@ public class OpcuaDatalogger {
      * @param client    OPC UA 客户端
      * @param nodeGroup 节点组
      */
-    private void createSubscriptionForNodeGroup(OpcUaClient client, CustomNodeGroup nodeGroup) throws Exception {
-        String groupName = nodeGroup.getName();
+    private void createSubscriptionForNodeGroup(OpcUaClient client, OpcUaNodeGroup nodeGroup) throws Exception {
+        String groupName = nodeGroup.getModuleType().toString().toLowerCase() + "_" + nodeGroup.getName();
         Integer sampleInterval = nodeGroup.getSampleInterval();
         LogUtil.logInfo(true, serverName, "Creating subscription for nodeGroup: {}", groupName);
+
+        // 首先读取节点组中的所有节点并更新，防止有数据永远不变导致获取不到真实值
 
         // 创建订阅
         OpcUaSubscription subscription = new OpcUaSubscription(client);
@@ -330,7 +348,7 @@ public class OpcuaDatalogger {
 
             // 添加监控项到该 nodeGroup 的订阅
             subscription.addMonitoredItem(monitoredItem);
-            LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{} in group: {}", node.getName(),node.getNodeId(), groupName);
+            LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{} in group: {}", node.getName(), node.getNodeId(), groupName);
 
         } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
             // 为 SCALAR 类型的每个节点创建监控项
@@ -340,7 +358,7 @@ public class OpcuaDatalogger {
 
                 // 添加监控项到该 nodeGroup 的订阅
                 subscription.addMonitoredItem(monitoredItem);
-                LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{}  in group: {}", node.getName(),node.getNodeId(), groupName);
+                LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{}  in group: {}", node.getName(), node.getNodeId(), groupName);
             }
         }
 
@@ -373,7 +391,7 @@ public class OpcuaDatalogger {
      * @param items     监控项列表
      * @param values    数据值列表
      */
-    private void handleDataChange(CustomNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+    private void handleDataChange(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
         try {
             // 参数验证
             if (items == null || values == null || items.isEmpty() || values.isEmpty()) {
@@ -392,10 +410,10 @@ public class OpcuaDatalogger {
             // 根据节点组类型采用不同的处理策略
             if (nodeGroup.getNodeType() == NodeGroupType.ARRAY) {
                 // ARRAY 类型：处理数组数据，拆分后赋值给各个节点
-                hasChanges = handleArrayData(nodeGroup, items, values);
+                hasChanges = updateArrayData(nodeGroup, items, values);
             } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
                 // SCALAR 类型：每个节点独立更新
-                hasChanges = handleScalarData(nodeGroup, items, values);
+                hasChanges = updateScalarData(nodeGroup, items, values);
             }
 
             // 如果有节点发生变化，将数据入队
@@ -407,15 +425,26 @@ public class OpcuaDatalogger {
                                 node.getName(), groupName);
                     }
                 }
+                if (nodeGroup.getModuleType() == ModuleType.CUSTOM) {
+                    // 将数据入队
+                    boolean success = globalDataQueue.enqueueCustomData(serverName, (CustomOpcUaNodeGroup) nodeGroup);
 
-                // 将数据入队
-                boolean success = globalDataQueue.enqueueCustomData(serverName, nodeGroup);
+                    if (success) {
+                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+                                ModuleType.CUSTOM.toString(), groupName, nodeGroup.getNodeList().size());
+                    } else {
+                        LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {}_{} - queue may be full", ModuleType.CUSTOM.toString(), groupName);
+                    }
+                }
 
-                if (success) {
-                    LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}, nodes count: {}",
-                            groupName, nodeGroup.getNodeList().size());
-                } else {
-                    LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {} - queue may be full", groupName);
+                if (nodeGroup.getModuleType() == ModuleType.ALARM) {
+                    // 将数据入队
+                    boolean success = globalDataQueue.enqueueAlarmData(serverName, (AlarmOpcUaNodeGroup) nodeGroup);
+
+                    if (success) {
+                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+                                ModuleType.ALARM.toString(), groupName, nodeGroup.getNodeList().size());
+                    }
                 }
             }
 
@@ -435,7 +464,7 @@ public class OpcuaDatalogger {
      * @param values    数据值列表
      * @return 是否有节点发生变化
      */
-    private boolean handleScalarData(CustomNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+    private boolean updateScalarData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
         boolean hasChanges = false;
 
         for (int i = 0; i < items.size(); i++) {
@@ -456,8 +485,8 @@ public class OpcuaDatalogger {
                     matchingNode.updateValue(value);
                     hasChanges = true;
 
-                    LogUtil.logDebugL1(true, serverName, "Node {} updated: {} -> {}",
-                            matchingNode.getName(), matchingNode.getOldValue(), matchingNode.getNewValue());
+                    LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
+                            nodeGroup.getName(), matchingNode.getName(), matchingNode.getOldValue(), matchingNode.getNewValue());
 
                 }
             }
@@ -475,7 +504,7 @@ public class OpcuaDatalogger {
      * @param values    数据值列表（只有一个元素，包含数组）
      * @return 是否有节点发生变化
      */
-    private boolean handleArrayData(CustomNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+    private boolean updateArrayData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
         // ARRAY 类型应该只有一个监控项（订阅的第一个节点）
         if (items.size() != 1 || values.size() != 1) {
             LogUtil.logWarning(true, serverName, "ARRAY nodeGroup should have only 1 monitored item, but got {}", items.size());
@@ -523,8 +552,8 @@ public class OpcuaDatalogger {
                 node.updateValue(elementValue);
                 hasChanges = true;
 
-                LogUtil.logDebugL1(true, serverName, "Node [{}] updated from array[{}]: {} -> {}",
-                        node.getName(), i, node.getOldValue(), node.getNewValue());
+                LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
+                        nodeGroup.getName(), node.getName(), node.getOldValue(), node.getNewValue());
 
             }
         }
@@ -542,7 +571,7 @@ public class OpcuaDatalogger {
      * @param nodeId    OPC UA NodeId
      * @return 匹配的 OpcUaNode，未找到返回 null
      */
-    private OpcUaNode findNodeByNodeId(CustomNodeGroup nodeGroup, NodeId nodeId) {
+    private OpcUaNode findNodeByNodeId(OpcUaNodeGroup nodeGroup, NodeId nodeId) {
         return nodeGroup.getNodeByNodeId(nodeId);
     }
 

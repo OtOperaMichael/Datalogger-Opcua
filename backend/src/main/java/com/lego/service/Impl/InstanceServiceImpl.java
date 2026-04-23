@@ -3,6 +3,7 @@ package com.lego.service.Impl;
 import com.lego.dao.Impl.InstanceDaoImpl;
 import com.lego.dao.InstanceDao;
 import com.lego.pojo.QueryLoad;
+import com.lego.pojo.template.ModuleType;
 import com.lego.service.InstanceService;
 
 import java.util.ArrayList;
@@ -24,9 +25,35 @@ public class InstanceServiceImpl implements InstanceService {
     @Override
     public List<Map<String, Object>> query(QueryLoad queryLoad) {
         List<Map<String, Object>> results = new ArrayList<>();
-        //tableName == moduleType + "_" + tableName, e.g. custom_group1, to avoid duplicate name across modules
-        String tableName = queryLoad.getModuleType().toString().toLowerCase() + "_" + queryLoad.getTableName();
-        results = instanceDao.queryFromDatabase(queryLoad.getServerName(), tableName, queryLoad.getStartTime(), queryLoad.getEndTime());
+        String tableName = "";
+        if (queryLoad.getModuleType() == null) {
+            return results;
+        }
+
+        if (queryLoad.getModuleType() == ModuleType.CUSTOM) {
+            //tableName == moduleType + "_" + tableName, e.g. custom_group1, to avoid duplicate name across modules
+            tableName = queryLoad.getModuleType().toString().toLowerCase() + "_" + queryLoad.getTableName();
+        } else {
+            //tableName == moduleType + "_" + "history". e.g. alarm_history, comm_history
+            tableName = queryLoad.getModuleType().toString().toLowerCase() + "_" + "history";
+        }
+
+        if (queryLoad.getModuleType() == ModuleType.CUSTOM ||
+                (queryLoad.getModuleType() == ModuleType.ALARM && "raw".equals(queryLoad.getTableName())) ||
+                queryLoad.getModuleType() == ModuleType.COMMUNICATION
+        ) {
+            results = instanceDao.queryFromDatabase(queryLoad.getServerName(), tableName, queryLoad.getStartTime(), queryLoad.getEndTime());
+
+        } else if (queryLoad.getModuleType() == ModuleType.ALARM && "top times".equals(queryLoad.getTableName())) {
+
+            results = instanceDao.queryAlarmByTopTimes(queryLoad.getServerName(), tableName, queryLoad.getStartTime(), queryLoad.getEndTime());
+
+        } else if (queryLoad.getModuleType() == ModuleType.ALARM && "top duration".equals(queryLoad.getTableName())) {
+
+            results = instanceDao.queryAlarmByTopDuration(queryLoad.getServerName(), tableName, queryLoad.getStartTime(), queryLoad.getEndTime());
+
+        }
+
         return results;
     }
 

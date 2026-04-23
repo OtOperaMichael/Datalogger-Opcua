@@ -6,7 +6,7 @@ import com.lego.pojo.DBConfig;
 import com.lego.pojo.template.ModuleType;
 import com.lego.serverTask.DataWriteTask;
 import com.lego.serverTask.protocols.opcua.OpcUaNode;
-import com.lego.serverTask.protocols.opcua.CustomNodeGroup;
+import com.lego.serverTask.protocols.opcua.CustomOpcUaNodeGroup;
 import com.lego.serverTask.protocols.opcua.OpcUaNodeGroup;
 
 import java.io.File;
@@ -202,12 +202,18 @@ public class DBUtil {
                 columns.setLength(columns.length() - 2);
             }
         } else if (nodeGroup.getModuleType() == ModuleType.ALARM) {
-            //columns = id + name + start_time + end_time + duration + device + despcription
+            // Alarm module columns: id + time + alarm_name + start_time + end_time + duration_seconds + device_name + description
+            columns .append("alarm_name TEXT NOT NULL, ")
+                    .append("start_time TIMESTAMP NOT NULL, ")
+                   .append("end_time TIMESTAMP NOT NULL, ")
+                   .append("duration INTEGER NOT NULL, ")
+                   .append("device TEXT NOT NULL, ")
+                   .append("description TEXT");
         }
 
         String sql = "CREATE TABLE IF NOT EXISTS " + fullTableName +
                 "(id SERIAL PRIMARY KEY, " +
-                "timestamp TIMESTAMPTZ DEFAULT NOW(), " +
+                "time TIMESTAMPTZ DEFAULT NOW(), " +
                 columns + ")";
 
         try (Connection conn = getConnection();
@@ -224,7 +230,7 @@ public class DBUtil {
     /**
      * 创建 hyper 表，存储时序数据
      */
-    public static void createHyperTable(String schemaName, CustomNodeGroup nodeGroup) {
+    public static void createHyperTable(String schemaName, CustomOpcUaNodeGroup nodeGroup) {
         String safeDbName = sanitizeIdentifier(schemaName);
         String safeTableName = sanitizeIdentifier(nodeGroup.getFullTableName());
         String fullTableName = safeDbName + "." + safeTableName;
@@ -405,6 +411,7 @@ public class DBUtil {
 
         // 获取第一个 task 的列名
         DataWriteTask firstTask = taskList.get(0);
+        LogUtil.logDebugL1(false, "app", "trying to write DataWriteTask: {}", firstTask);
         List<String> columns = firstTask.getData().keySet().stream()
                 .map(DBUtil::sanitizeIdentifier)
                 .collect(Collectors.toList());
@@ -628,7 +635,7 @@ public class DBUtil {
         return result.toString();
     }
 
-    //查询数据
+    //查询数据, for custom module
     public static List<Map<String, Object>> queryData(String schemaName, String tableName, String startTime, String endTime) {
         List<Map<String, Object>> results = new ArrayList<>();
 
@@ -897,6 +904,102 @@ public class DBUtil {
         }
 
         return logMessages;
+    }
+
+    /**
+     * Query alarm data grouped by trigger times (top times)
+     *
+     * @param schemaName schema name
+     * @param tableName table name (should be "alarm_history")
+     * @param startTime start time
+     * @param endTime end time
+     * @return list of maps containing alarm statistics grouped by alarm_name and device
+     */
+    public static List<Map<String, Object>> queryAlarmByTopTimes(String schemaName, String tableName, String startTime, String endTime) {
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        String sql = "SELECT " +
+                "alarm_name, " +
+                "device, " +
+                "COUNT(*) as trigger_times " +
+                "FROM " + sanitizeIdentifier(schemaName) + "." + sanitizeIdentifier(tableName) + " " +
+                "WHERE time >= ?::timestamptz AND time <= ?::timestamptz " +
+                "GROUP BY alarm_name, device " +
+                "ORDER BY trigger_times DESC " +
+                "LIMIT 100";
+
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, startTime);
+            pstmt.setString(2, endTime);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("alarm_name", rs.getString("alarm_name"));
+                    row.put("device", rs.getString("device"));
+                    row.put("trigger_times", rs.getInt("trigger_times"));
+                    results.add(row);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            LogUtil.logError(true, schemaName, "TimescaleDB query alarm by top times error: {}", e.getMessage());
+        }
+
+        return results;
+    }
+
+    /**
+     * Query alarm data grouped by total duration (top duration)
+     *
+     * @param schemaName schema name
+     * @param tableName table name (should be "alarm_history")
+     * @param startTime start time
+     * @param endTime end time
+     * @return list of maps containing alarm statistics grouped by alarm_name and device
+     */
+    public static List<Map<String, Object>> queryAlarmByTopDuration(String schemaName, String tableName, String startTime, String endTime) {
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        String sql = "SELECT " +
+                "alarm_name, " +
+                "device, " +
+                "COUNT(*) as trigger_times, " +
+                "SUM(duration) as total_duration_seconds, " +
+                "AVG(duration) as avg_duration_seconds, " +
+                "MAX(duration) as max_duration_seconds " +
+                "FROM " + sanitizeIdentifier(schemaName) + "." + sanitizeIdentifier(tableName) + " " +
+                "WHERE time >= ?::timestamptz AND time <= ?::timestamptz " +
+                "GROUP BY alarm_name, device " +
+                "ORDER BY total_duration_seconds DESC " +
+                "LIMIT 100";
+
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, startTime);
+            pstmt.setString(2, endTime);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("alarm_name", rs.getString("alarm_name"));
+                    row.put("device", rs.getString("device"));
+                    row.put("trigger_times", rs.getInt("trigger_times"));
+                    row.put("total_duration_seconds", rs.getInt("total_duration_seconds"));
+                    row.put("avg_duration_seconds", rs.getDouble("avg_duration_seconds"));
+                    row.put("max_duration_seconds", rs.getInt("max_duration_seconds"));
+                    results.add(row);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            LogUtil.logError(true, schemaName, "TimescaleDB query alarm by top duration error: {}", e.getMessage());
+        }
+
+        return results;
     }
 
     /**
