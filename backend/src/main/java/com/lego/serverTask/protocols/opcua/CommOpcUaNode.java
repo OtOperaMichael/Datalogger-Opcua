@@ -16,11 +16,15 @@ import lombok.Setter;
 public class CommOpcUaNode extends OpcUaNode {
 
     @Getter
+    private String deviceName;
+
+    @Getter
     @Setter
     private boolean newRecord;
 
-    public CommOpcUaNode(String serverName, String name, String nodeIdStr, DataType dataType) {
+    public CommOpcUaNode(String serverName, String name, String nodeIdStr, DataType dataType, String deviceName) {
         super(serverName, name, nodeIdStr, dataType);
+        this.deviceName = deviceName;
         this.newRecord = false;
     }
 

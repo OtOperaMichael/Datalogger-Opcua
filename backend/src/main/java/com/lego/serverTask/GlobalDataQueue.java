@@ -191,13 +191,13 @@ public class GlobalDataQueue {
 
                 //  如果comm数据ready
                 if (commNode.isNewRecord()) {
-                    Object newValue = node.getNewValue();
-                    Object oldValue = node.getOldValue();
+                    Object newValue = commNode.getNewValue();
+                    Object oldValue = commNode.getOldValue();
 
                     // 只添加非 null 的值
                     if (newValue != null) {
                         // Communication nodes store message content as string
-                        String message = "node: [" + node.getName() + "] value changed from " + oldValue + " to " + newValue;
+                        String message = "node: [" +commNode.getDeviceName() + " - " + commNode.getName() + "] value changed from " + oldValue + " to " + newValue;
                         data.put("message", message);
                     }
 

@@ -22,7 +22,8 @@ public class CommOpcUaNodeGroup extends OpcUaNodeGroup {
                         serverName,
                         node.getName(),
                         node.getNodeId(),
-                        DataType.STRING
+                        DataType.STRING,
+                        table.getName()
                 );
 
                 if (customOpcUaNode.getNodeId() == null) {
