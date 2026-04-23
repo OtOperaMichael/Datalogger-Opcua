@@ -22,6 +22,7 @@ import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaSubscription;
 import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription;
 
 import java.lang.reflect.Array;
@@ -161,10 +162,11 @@ public class OpcuaDatalogger {
 
             }
 
+            //create table, hyper, one single table for comm module, called "comm_history"
+            DBUtil.createHyperTable(serverName, commModuleNodeGroupList.get(0));
+
         }
 
-        //create table, hyper, one single table for alarm module, called "alarm_history"
-        DBUtil.createHyperTable(serverName, commModuleNodeGroupList.get(0));
 
     }
 
@@ -209,7 +211,13 @@ public class OpcuaDatalogger {
                     endpoint.getSecurityLevel()
             );
 
-            OpcUaClientConfig config = OpcUaClientConfig.builder().setEndpoint(fixedEndpoint).build();
+            OpcUaClientConfig config = OpcUaClientConfig.builder()
+                    .setEndpoint(fixedEndpoint)
+                    .setSessionTimeout(UInteger.valueOf(60000))
+                    .setRequestTimeout(UInteger.valueOf(30000))
+                    .setKeepAliveInterval(UInteger.valueOf(10000))
+                    .setKeepAliveFailuresAllowed(UInteger.valueOf(3))
+                    .build();
             client = OpcUaClient.create(config);
 
             client.connect();

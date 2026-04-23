@@ -11,11 +11,7 @@ package com.lego.serverTask;
  */
 
 
-import com.lego.serverTask.protocols.opcua.AlarmOpcUaNode;
-import com.lego.serverTask.protocols.opcua.AlarmOpcUaNodeGroup;
-import com.lego.serverTask.protocols.opcua.CommOpcUaNodeGroup;
-import com.lego.serverTask.protocols.opcua.OpcUaNode;
-import com.lego.serverTask.protocols.opcua.CustomOpcUaNodeGroup;
+import com.lego.serverTask.protocols.opcua.*;
 import com.lego.util.LogUtil;
 import com.lego.util.ThreadDiagnosticUtil;
 
@@ -190,26 +186,32 @@ public class GlobalDataQueue {
 
             // 遍历 nodeGroup 中的所有节点，提取数据
             for (OpcUaNode node : nodeGroup.getNodeList()) {
+                CommOpcUaNode commNode = (CommOpcUaNode) node;
                 LinkedHashMap<String, Object> data = new LinkedHashMap<>();
-                Object newValue = node.getNewValue();
-                Object oldValue = node.getOldValue();
 
-                // 只添加非 null 的值
-                if (newValue != null) {
-                    // Communication nodes store message content as string
-                    String message = "node: [" + node.getName() + "] value changed from " + oldValue + " to " + newValue;
-                    data.put("message", message);
-                }
+                //  如果comm数据ready
+                if (commNode.isNewRecord()) {
+                    Object newValue = node.getNewValue();
+                    Object oldValue = node.getOldValue();
 
-                DataWriteTask task = new DataWriteTask(serverName, tableName, data);
-                success = dataQueue.offer(task);
+                    // 只添加非 null 的值
+                    if (newValue != null) {
+                        // Communication nodes store message content as string
+                        String message = "node: [" + node.getName() + "] value changed from " + oldValue + " to " + newValue;
+                        data.put("message", message);
+                    }
 
-                if (!success) {
-                    // 队列已满
-                    LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}",
-                            serverName, dataQueue.size());
-                } else {
-                    LogUtil.logDebugL1(false, "app", "enqueue communication data: {}", task.toString());
+                    DataWriteTask task = new DataWriteTask(serverName, tableName, data);
+                    success = dataQueue.offer(task);
+
+                    if (!success) {
+                        // 队列已满
+                        LogUtil.logWarning(true, "app", "Global data queue is full! Server: {}, Queue size: {}",
+                                serverName, dataQueue.size());
+                    } else {
+                        LogUtil.logDebugL1(false, "app", "enqueue communication data: {}", task.toString());
+                    }
+                    commNode.reset();
                 }
 
             }
