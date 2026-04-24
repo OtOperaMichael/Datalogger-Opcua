@@ -25,3 +25,4 @@ import HomeRight from "@/components/home/HomeRight.vue";
 
 }
 </style>
+

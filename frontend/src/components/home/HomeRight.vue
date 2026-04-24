@@ -281,10 +281,10 @@ function isDateKey(key: string | number): boolean {
 
   // 只将明确的时间字段识别为日期
   return keyStr === 'time' ||
-         keyStr === 'start_time' ||
-         keyStr === 'end_time' ||
-         keyStr.includes('_timestamp') ||
-         (keyStr.includes('time') && !keyStr.includes('_times'));
+    keyStr === 'start_time' ||
+    keyStr === 'end_time' ||
+    keyStr.includes('_timestamp') ||
+    (keyStr.includes('time') && !keyStr.includes('_times'));
 }
 
 </script>
@@ -382,7 +382,7 @@ function isDateKey(key: string | number): boolean {
           <a-table
             :dataSource="queryResults"
             :pagination="paginationConfig"
-            :scroll="{ x: 800, y: 600 }"
+            :scroll="{ x: 800, y: 1000 }"
             size="small"
             bordered
           >

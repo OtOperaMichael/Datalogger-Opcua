@@ -1,5 +1,8 @@
 package com.lego.util;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 /**
  * ClassName: LogUtil
  * Package: com.lego.util
@@ -13,14 +16,18 @@ package com.lego.util;
 
 public class LogUtil {
     // 日志级别
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int LOG_LEVEL = SystemConfigUtil.getLogLevel();
 
+
     private static void logInfo(String msg) {
-        System.out.println(msg);
+        String timestamp = LocalDateTime.now().format(FORMATTER);
+        System.out.println("[" + timestamp + "] " + msg);
     }
 
     private static void logError(String msg) {
-        System.err.println(msg);
+        String timestamp = LocalDateTime.now().format(FORMATTER);
+        System.err.println("[" + timestamp + "] " + msg);
     }
 
     public static void logInfo(Boolean dbSave, String schema, String msg) {
