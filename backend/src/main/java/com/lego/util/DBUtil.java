@@ -417,7 +417,7 @@ public class DBUtil {
 
         // 获取第一个 task 的列名
         DataWriteTask firstTask = taskList.get(0);
-        LogUtil.logDebugL1(false, "app", "trying to write DataWriteTask: {}", firstTask);
+//        LogUtil.logDebugL1(false, "app", "trying to write DataWriteTask: {}", firstTask);
         List<String> columns = firstTask.getData().keySet().stream()
                 .map(DBUtil::sanitizeIdentifier)
                 .collect(Collectors.toList());

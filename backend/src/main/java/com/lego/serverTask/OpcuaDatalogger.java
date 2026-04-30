@@ -13,9 +13,7 @@ import com.lego.util.DBUtil;
 import com.lego.util.LogUtil;
 import com.lego.util.TemplateUtil;
 import lombok.Getter;
-import org.eclipse.milo.opcua.sdk.client.DiscoveryClient;
-import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
-import org.eclipse.milo.opcua.sdk.client.OpcUaClientConfig;
+import org.eclipse.milo.opcua.sdk.client.*;
 import org.eclipse.milo.opcua.sdk.client.subscriptions.MonitoredItemSynchronizationException;
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaMonitoredItem;
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaSubscription;
@@ -31,6 +29,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * ClassName: PlcMonitoringTask
@@ -61,12 +64,19 @@ public class OpcuaDatalogger {
     // 存储每个 nodeGroup 对应的 subscription，用于分组管理
     private Map<String, OpcUaSubscription> subscriptionMap = new HashMap<>();
 
-    // 保存 client 引用，用于关闭时断开连接
+    // 保存 client 引用,用于关闭时断开连接
     private OpcUaClient client;
 
     // 标记任务是否正在运行
     @Getter
     private volatile boolean isRunning = false;
+
+    // 自动重连相关
+    private ScheduledExecutorService reconnectExecutor;
+    private final AtomicBoolean isReconnecting = new AtomicBoolean(false);
+    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+    private static final int MAX_RECONNECT_ATTEMPTS = 10;
+    private static final long RECONNECT_DELAY_SECONDS = 5;
 
     //构造器，初始化tagGroups
     public OpcuaDatalogger(Server server) {
@@ -182,74 +192,204 @@ public class OpcuaDatalogger {
         }
 
         try {
-            // 获取服务端点描述
-            List<EndpointDescription> endpoints = DiscoveryClient.getEndpoints(serverUrl).get();
-            EndpointDescription endpoint = endpoints.stream()
-                    .filter(e -> e.getSecurityPolicyUri().equals(SecurityPolicy.None.getUri()))
-                    .findFirst()
-                    .orElse(null);
-
-            if (endpoint == null) {
-                LogUtil.logError(true, serverName, "No endpoint with SecurityPolicy.None found for server: {}", serverUrl);
-                return;
-            }
-
-            String endpointUrl = endpoint.getEndpointUrl();
-            LogUtil.logInfo(true, serverName, "Original endpoint URL from server: {}", endpointUrl);
-
-            String fixedEndpointUrl = fixEndpointUrl(endpointUrl, serverUrl);
-            LogUtil.logInfo(true, serverName, "Fixed endpoint URL: {}", fixedEndpointUrl);
-
-            EndpointDescription fixedEndpoint = new EndpointDescription(
-                    fixedEndpointUrl,
-                    endpoint.getServer(),
-                    endpoint.getServerCertificate(),
-                    endpoint.getSecurityMode(),
-                    endpoint.getSecurityPolicyUri(),
-                    endpoint.getUserIdentityTokens(),
-                    endpoint.getTransportProfileUri(),
-                    endpoint.getSecurityLevel()
-            );
-
-            OpcUaClientConfig config = OpcUaClientConfig.builder()
-                    .setEndpoint(fixedEndpoint)
-                    .setSessionTimeout(UInteger.valueOf(60000))
-                    .setRequestTimeout(UInteger.valueOf(30000))
-                    .setKeepAliveInterval(UInteger.valueOf(10000))
-                    .setKeepAliveFailuresAllowed(UInteger.valueOf(3))
-                    .build();
-            client = OpcUaClient.create(config);
-
-            client.connect();
-            LogUtil.logInfo(true, serverName, "Connected to OPC UA Server: {}", serverUrl);
-
-            // 创建订阅
-            if (customModuleIsEnabled) {
-                for (CustomOpcUaNodeGroup nodeGroup : customModuleNodeGroupList) {
-                    createSubscriptionForNodeGroup(client, nodeGroup);
-                }
-            }
-
-            if (alarmModuleIsEnabled) {
-                for (AlarmOpcUaNodeGroup nodeGroup : alarmModuleNodeGroupList) {
-                    createSubscriptionForNodeGroup(client, nodeGroup);
-                }
-            }
-
-            if (communicationModuleIsEnabled) {
-                for (CommOpcUaNodeGroup nodeGroup : commModuleNodeGroupList) {
-                    createSubscriptionForNodeGroup(client, nodeGroup);
-                }
-            }
-
+            connectAndSubscribe();
+            
             isRunning = true;
             LogUtil.logInfo(true, serverName, "Server {} started successfully", serverName);
 
         } catch (Exception e) {
             isRunning = false;
-            // 启动失败，记录日志并抛出异常
             LogUtil.logError(true, serverName, "Failed to start server: {}", e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * 执行连接和订阅的核心逻辑
+     */
+    private void connectAndSubscribe() throws Exception {
+        List<EndpointDescription> endpoints = DiscoveryClient.getEndpoints(serverUrl).get();
+        EndpointDescription endpoint = endpoints.stream()
+                .filter(e -> e.getSecurityPolicyUri().equals(SecurityPolicy.None.getUri()))
+                .findFirst()
+                .orElse(null);
+
+        if (endpoint == null) {
+            LogUtil.logError(true, serverName, "No endpoint with SecurityPolicy.None found for server: {}", serverUrl);
+            throw new Exception("No suitable endpoint found");
+        }
+
+        String endpointUrl = endpoint.getEndpointUrl();
+        LogUtil.logInfo(true, serverName, "Original endpoint URL from server: {}", endpointUrl);
+
+        String fixedEndpointUrl = fixEndpointUrl(endpointUrl, serverUrl);
+        LogUtil.logInfo(true, serverName, "Fixed endpoint URL: {}", fixedEndpointUrl);
+
+        EndpointDescription fixedEndpoint = new EndpointDescription(
+                fixedEndpointUrl,
+                endpoint.getServer(),
+                endpoint.getServerCertificate(),
+                endpoint.getSecurityMode(),
+                endpoint.getSecurityPolicyUri(),
+                endpoint.getUserIdentityTokens(),
+                endpoint.getTransportProfileUri(),
+                endpoint.getSecurityLevel()
+        );
+
+        OpcUaClientConfig config = OpcUaClientConfig.builder()
+                .setEndpoint(fixedEndpoint)
+                .setSessionTimeout(UInteger.valueOf(60000))
+                .setRequestTimeout(UInteger.valueOf(10000))
+                .setKeepAliveInterval(UInteger.valueOf(5000))
+                .setKeepAliveFailuresAllowed(UInteger.valueOf(3))
+                .build();
+        client = OpcUaClient.create(config);
+
+        client.addSessionActivityListener(new SessionActivityListener() {
+            @Override
+            public void onSessionActive(UaSession session) {
+                LogUtil.logDebugL1(true, serverName, "Opcua session activated");
+            }
+
+            @Override
+            public void onSessionInactive(UaSession session) {
+                LogUtil.logDebugL1(true, serverName, "Opcua session deactivated");
+                handleConnectionLost();
+            }
+        });
+
+
+        client.addFaultListener(faultEvent -> {
+            LogUtil.logError(true, serverName, "OPC UA fault received: {}", faultEvent.toString());
+        });
+
+        client.connect();
+        LogUtil.logInfo(true, serverName, "Connected to OPC UA Server: {}", serverUrl);
+
+        createSubscriptions();
+
+        reconnectAttempts.set(0);
+    }
+
+    /**
+     * 创建所有模块的订阅
+     */
+    private void createSubscriptions() throws Exception {
+        if (customModuleIsEnabled) {
+            for (CustomOpcUaNodeGroup nodeGroup : customModuleNodeGroupList) {
+                createSubscriptionForNodeGroup(client, nodeGroup);
+            }
+        }
+
+        if (alarmModuleIsEnabled) {
+            for (AlarmOpcUaNodeGroup nodeGroup : alarmModuleNodeGroupList) {
+                createSubscriptionForNodeGroup(client, nodeGroup);
+            }
+        }
+
+        if (communicationModuleIsEnabled) {
+            for (CommOpcUaNodeGroup nodeGroup : commModuleNodeGroupList) {
+                createSubscriptionForNodeGroup(client, nodeGroup);
+            }
+        }
+    }
+
+    /**
+     * 处理连接丢失，触发自动重连
+     */
+    private void handleConnectionLost() {
+        if (!isRunning || isReconnecting.get()) {
+            return;
+        }
+
+        LogUtil.logWarning(true, serverName, "Connection lost, scheduling reconnection...");
+        
+        if (reconnectExecutor == null || reconnectExecutor.isShutdown()) {
+            reconnectExecutor = new ScheduledThreadPoolExecutor(1, r -> {
+                Thread thread = new Thread(r, "Reconnect-Thread-" + serverName);
+                thread.setDaemon(true);
+                return thread;
+            });
+        }
+
+        reconnectExecutor.schedule(this::attemptReconnect, RECONNECT_DELAY_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 尝试重新连接
+     */
+    private void attemptReconnect() {
+        if (!isRunning) {
+            LogUtil.logInfo(true, serverName, "Server is not running, canceling reconnection");
+            return;
+        }
+
+        if (isReconnecting.get()) {
+            LogUtil.logWarning(true, serverName, "Reconnection already in progress");
+            return;
+        }
+
+        int attempts = reconnectAttempts.incrementAndGet();
+        if (attempts > MAX_RECONNECT_ATTEMPTS) {
+            LogUtil.logError(true, serverName, "Max reconnection attempts ({}) reached, giving up", MAX_RECONNECT_ATTEMPTS);
+            isRunning = false;
+            return;
+        }
+
+        if (!isReconnecting.compareAndSet(false, true)) {
+            LogUtil.logWarning(true, serverName, "Another reconnection attempt is in progress");
+            return;
+        }
+
+        try {
+            LogUtil.logInfo(true, serverName, "Attempting reconnection (attempt {}/{})", attempts, MAX_RECONNECT_ATTEMPTS);
+
+            cleanupConnection();
+
+            connectAndSubscribe();
+
+            isReconnecting.set(false);
+            reconnectAttempts.set(0);
+            LogUtil.logInfo(true, serverName, "Reconnection successful");
+
+        } catch (Exception e) {
+            isReconnecting.set(false);
+            LogUtil.logError(true, serverName, "Reconnection attempt {} failed: {}", attempts, e.getMessage());
+
+            if (isRunning && attempts < MAX_RECONNECT_ATTEMPTS) {
+                long delay = RECONNECT_DELAY_SECONDS * attempts;
+                LogUtil.logInfo(true, serverName, "Scheduling next reconnection attempt in {} seconds", delay);
+                reconnectExecutor.schedule(this::attemptReconnect, delay, TimeUnit.SECONDS);
+            } else if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+                // 新增：明确记录已达到最大重试次数并停止
+                LogUtil.logError(true, serverName, "Max reconnection attempts ({}) reached, giving up. Server task will stop.", MAX_RECONNECT_ATTEMPTS);
+                isRunning = false;
+            }
+        }
+    }
+
+    /**
+     * 清理当前连接资源（不断开连接状态标记）
+     */
+    private void cleanupConnection() {
+        if (!subscriptionMap.isEmpty()) {
+            LogUtil.logInfo(true, serverName, "Cleaning up {} subscriptions...", subscriptionMap.size());
+            for (Map.Entry<String, OpcUaSubscription> entry : subscriptionMap.entrySet()) {
+                try {
+                    entry.getValue().delete();
+                } catch (Exception e) {
+                    LogUtil.logWarning(true, serverName, "Error deleting subscription {}: {}", entry.getKey(), e.getMessage());
+                }
+            }
+            subscriptionMap.clear();
+        }
+
+        if (client != null) {
+            try {
+                client.disconnect();
+            } catch (Exception e) {
+                LogUtil.logWarning(true, serverName, "Error disconnecting client: {}", e.getMessage());
+            }
         }
     }
 
@@ -299,32 +439,15 @@ public class OpcuaDatalogger {
         LogUtil.logInfo(true, serverName, "Starting shutdown process for server: {}", serverName);
         isRunning = false;
 
-        // 1. 删除所有 subscription
-        if (!subscriptionMap.isEmpty()) {
-            LogUtil.logInfo(true, serverName, "Deleting {} subscriptions...", subscriptionMap.size());
-            for (Map.Entry<String, OpcUaSubscription> entry : subscriptionMap.entrySet()) {
-                try {
-                    entry.getValue().delete();
-                    LogUtil.logInfo(true, serverName, "Deleted subscription for nodeGroup: {}", entry.getKey());
-                } catch (Exception e) {
-                    LogUtil.logError(true, serverName, "Deleting subscription for {}: {}", entry.getKey(), e.getMessage());
-                }
-            }
-            subscriptionMap.clear();
-            LogUtil.logInfo(true, serverName, "All subscriptions deleted and map cleared");
+        if (reconnectExecutor != null && !reconnectExecutor.isShutdown()) {
+            reconnectExecutor.shutdownNow();
+            LogUtil.logInfo(true, serverName, "Reconnect executor shut down");
         }
 
-        // 2. 断开 OPC UA 客户端连接
-        if (client != null) {
-            try {
-                client.disconnect();
-                LogUtil.logInfo(true, serverName, "OPC UA client disconnected successfully");
-            } catch (Exception e) {
-                LogUtil.logError(true, serverName, "Disconnecting OPC UA client: {}", e.getMessage());
-            }
-        }
+        isReconnecting.set(false);
 
-        // 3. 清空 nodeGroup 列表
+        cleanupConnection();
+
         if (customModuleIsEnabled) {
             if (!customModuleNodeGroupList.isEmpty()) {
                 int size = customModuleNodeGroupList.size();
@@ -470,8 +593,8 @@ public class OpcuaDatalogger {
                     boolean success = globalDataQueue.enqueueCustomData(serverName, (CustomOpcUaNodeGroup) nodeGroup);
 
                     if (success) {
-                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
-                                ModuleType.CUSTOM.toString(), groupName, nodeGroup.getNodeList().size());
+//                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+//                                ModuleType.CUSTOM.toString(), groupName, nodeGroup.getNodeList().size());
                     } else {
                         LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {}_{} - queue may be full", ModuleType.CUSTOM.toString(), groupName);
                     }
@@ -482,8 +605,8 @@ public class OpcuaDatalogger {
                     boolean success = globalDataQueue.enqueueAlarmData(serverName, (AlarmOpcUaNodeGroup) nodeGroup);
 
                     if (success) {
-                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
-                                ModuleType.ALARM.toString(), groupName, nodeGroup.getNodeList().size());
+//                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+//                                ModuleType.ALARM.toString(), groupName, nodeGroup.getNodeList().size());
                     }
                 }
 
@@ -492,8 +615,8 @@ public class OpcuaDatalogger {
                     boolean success = globalDataQueue.enqueueCommunicationData(serverName, (CommOpcUaNodeGroup) nodeGroup);
 
                     if (success) {
-                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
-                                ModuleType.COMMUNICATION.toString(), groupName, nodeGroup.getNodeList().size());
+//                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+//                                ModuleType.COMMUNICATION.toString(), groupName, nodeGroup.getNodeList().size());
                     } else {
                         LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {}_{} - queue may be full", ModuleType.COMMUNICATION.toString(), groupName);
                     }
@@ -537,8 +660,8 @@ public class OpcuaDatalogger {
                     matchingNode.updateValue(value);
                     hasChanges = true;
 
-                    LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
-                            nodeGroup.getName(), matchingNode.getName(), matchingNode.getOldValue(), matchingNode.getNewValue());
+//                    LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
+//                            nodeGroup.getName(), matchingNode.getName(), matchingNode.getOldValue(), matchingNode.getNewValue());
 
                 }
             }
@@ -604,14 +727,14 @@ public class OpcuaDatalogger {
                 node.updateValue(elementValue);
                 hasChanges = true;
 
-                LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
-                        nodeGroup.getName(), node.getName(), node.getOldValue(), node.getNewValue());
+//                LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
+//                        nodeGroup.getName(), node.getName(), node.getOldValue(), node.getNewValue());
 
             }
         }
 
-        LogUtil.logDebugL1(true, serverName, "ARRAY nodeGroup {} processed: {} elements from array of length {}",
-                nodeGroup.getName(), nodeList.size(), arrayLength);
+//        LogUtil.logDebugL1(true, serverName, "ARRAY nodeGroup {} processed: {} elements from array of length {}",
+//                nodeGroup.getName(), nodeList.size(), arrayLength);
 
         return hasChanges;
     }
