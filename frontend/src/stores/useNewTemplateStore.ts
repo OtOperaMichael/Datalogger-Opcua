@@ -89,6 +89,82 @@ export const useNewTemplateStore = defineStore("newTemplateStore", {
       this.communication = data.communication ? this.convertCommModule(data.communication) : this.communication;
     },
 
+    /**
+     * 从导入的JSON数据加载模板到当前编辑的模板
+     * @param data 导入的模板数据
+     */
+    loadFromJson(data: any) {
+      // 保留当前模板的ID和创建状态
+      const currentId = this.id;
+      const currentCreateNew = this.createNew;
+
+      // 加载基本信息
+      this.name = data.name || "";
+      this.port = data.port || "4840";
+      this.postfix = data.postfix || "";
+
+      // 加载custom模块
+      if (data.custom) {
+        this.custom = this.convertCustomModule(data.custom);
+      } else {
+        this.custom = {
+          enable: true,
+          tableList: Array.from({length: 1}, () => ({
+            name: "",
+            sampleInterval: 1000,
+            nodeGroupType: NodeGroupType.SCALAR,
+            nodeList: Array.from({length: 10}, () => ({
+              name: "",
+              nodeId: "",
+              dataType: DataType.INT
+            }))
+          })) as CustomTableInterface[]
+        } as CustomModuleInterface;
+      }
+
+      // 加载alarm模块
+      if (data.alarm) {
+        this.alarm = this.convertAlarmModule(data.alarm);
+      } else {
+        this.alarm = {
+          enable: false,
+          tableList: Array.from({length: 1}, () => ({
+            name: "",
+            sampleInterval: 1000,
+            nodeGroupType: NodeGroupType.SCALAR,
+            nodeList: Array.from({length: 10}, () => ({
+              name: "",
+              nodeId: "",
+              triggerType: TriggerType.RISING,
+              description: ""
+            }))
+          })) as AlarmTableInterface[]
+        } as AlarmModuleInterface;
+      }
+
+      // 加载communication模块
+      if (data.communication) {
+        this.communication = this.convertCommModule(data.communication);
+      } else {
+        this.communication = {
+          enable: false,
+          tableList: Array.from({length: 1}, () => ({
+            name: "",
+            sampleInterval: 1000,
+            nodeGroupType: NodeGroupType.SCALAR,
+            nodeList: Array.from({length: 10}, () => ({
+              name: "",
+              nodeId: ""
+            }))
+          })) as CommTableInterface[]
+        } as CommModuleInterface;
+      }
+
+      // 恢复ID和创建状态
+      this.id = currentId;
+      this.createNew = currentCreateNew;
+    },
+
     convertCustomModule(data: any): CustomModuleInterface {
       const module = JSON.parse(JSON.stringify(data)) as any;
 

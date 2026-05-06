@@ -4,6 +4,7 @@ import TabCustomModule from "@/components/template/tabs/TabCustomModule.vue";
 import TabAlarmModule from "@/components/template/tabs/TabAlarmModule.vue";
 import TabCommModule from "@/components/template/tabs/TabCommModule.vue";
 import {message} from "ant-design-vue";
+import { DownloadOutlined, UploadOutlined } from '@ant-design/icons-vue';
 
 const activeKeyCustomModule = ref('1');
 const activeKeyAlarmModule = ref('1');
@@ -296,6 +297,78 @@ async function saveTemplate() {
   console.log('Template ifNew: ', templateStore.createNew)
 }
 
+// 导出当前选中的模板
+function exportTemplate() {
+  try {
+    // 获取当前模板数据
+    const templateData = templateStore.toJSON();
+
+    // 创建Blob对象
+    const blob = new Blob([JSON.stringify(templateData, null, 2)], { type: 'application/json' });
+
+    // 创建下载链接
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${templateData.name || 'template'}.json`;
+
+    // 触发下载
+    document.body.appendChild(link);
+    link.click();
+
+    // 清理
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    message.success('Template exported successfully');
+  } catch (error) {
+    console.error('Export template error:', error);
+    message.error('Failed to export template');
+  }
+}
+
+// 导入模板到当前选中的模板
+function importTemplate(file: File) {
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    try {
+      const content = e.target?.result as string;
+
+      // 解析JSON
+      let templateData;
+      if (file.name.endsWith('.json')) {
+        templateData = JSON.parse(content);
+      } else {
+        message.warning('Only JSON format is supported');
+        return false;
+      }
+
+      // 验证导入的数据结构
+      if (!templateData.name || !templateData.port) {
+        throw new Error('Invalid template format');
+      }
+
+      // 确认导入
+      if (confirm('Importing will replace the current template data. Continue?')) {
+        // 将导入的数据加载到当前store中
+        templateStore.loadFromJson(templateData);
+        message.success('Template imported successfully');
+      }
+    } catch (error) {
+      console.error('Import template error:', error);
+      message.error('Failed to import template: Invalid format');
+    }
+  };
+
+  reader.onerror = () => {
+    message.error('Failed to read file');
+  };
+
+  reader.readAsText(file);
+  return false; // 阻止默认上传行为
+}
+
 </script>
 
 <template>
@@ -424,12 +497,41 @@ async function saveTemplate() {
     </div>
 
     <div id="templateBottom">
+
+      <a-button
+        type="default"
+        v-show="loginUserStore.getIsLoggedIn"
+        :disabled="!templateStore.editing"
+        @click="exportTemplate"
+        style="margin-right: 10px;"
+      >
+        <template #icon><DownloadOutlined /></template>
+        Export
+      </a-button>
+
+      <a-upload
+        :showUploadList="false"
+        :beforeUpload="importTemplate"
+        accept=".json"
+      >
+        <a-button
+          type="default"
+          v-show="loginUserStore.getIsLoggedIn"
+          :disabled="!templateStore.editing"
+          style="margin-right: 10px;"
+        >
+          <template #icon><UploadOutlined /></template>
+          Import
+        </a-button>
+      </a-upload>
+
       <a-button type="primary"
                 v-show="loginUserStore.getIsLoggedIn"
                 :disabled="!templateStore.editing"
                 @click="saveTemplate()"
       >Save Template
       </a-button>
+
     </div>
 
   </div>
