@@ -89,7 +89,7 @@ const testSuccess = ref(false)
 
 const formState = ref({
   // 数据库配置
-  jdbcUrl: 'jdbc:postgresql://datalogger-database:5432/datalogger',
+  jdbcUrl: 'jdbc:postgresql://datalogger-opcua-database:5432/datalogger',
   username: 'postgres',
   password: '123456',
   driverClassName: 'org.postgresql.Driver',
