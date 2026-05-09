@@ -1,0 +1,92 @@
+services:
+  # ========================
+  # 后端服务 (Servlet + Tomcat)
+  # ========================
+  datalogger-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: datalogger-opcua-backend:v1.0
+    container_name: datalogger-opcua-backend
+    ports:
+      - "8180:8080"
+    environment:
+      JAVA_OPTS: >-
+        --add-opens=java.base/java.nio=ALL-UNNAMED
+        --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+        --add-opens=java.base/java.lang=ALL-UNNAMED
+        --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+        --add-opens=java.base/java.math=ALL-UNNAMED
+        --add-opens=java.base/java.io=ALL-UNNAMED
+        --add-opens=java.base/java.util=ALL-UNNAMED
+        -Dlego.data.dir=/var/lib/lego
+      TZ: Asia/Shanghai
+    volumes:
+      - ./backend_data:/var/lib/lego
+    depends_on:
+      - timescaledb
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ========================
+  # 前端服务 (Nginx 静态资源)
+  # ========================
+  datalogger-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: datalogger-opcua-frontend:v1.0         # ← 显式指定镜像名
+    container_name: datalogger-opcua-frontend
+    ports:
+      - "1234:80"
+    environment:
+      - TZ=Asia/Shanghai        #统一时区
+    depends_on:
+    - datalogger-backend  # 虽然前端是静态资源，但逻辑上依赖后端 API
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ========================
+  # 数据库
+  # ========================
+  timescaledb:
+    image: timescale/timescaledb:2.26.1-pg15
+    container_name: datalogger-opcua-database
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: datalogger     # 👈 关键：自动创建
+      TZ: Asia/Shanghai          #统一时区
+    volumes:
+      - /data/tsdb_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ========================
+  # 数据库管理工具
+  # ========================
+  pgadmin:
+    image: dpage/pgadmin4:9.13
+    container_name: datalogger-opcua-database-ui
+    ports:
+      - "8082:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: datalogger.admin@lego.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      TZ: Asia/Shanghai          #统一时区
+    depends_on:
+      - timescaledb
+    restart: unless-stopped
+    networks:
+      - app-network
+
+# ========================
+# 网络定义
+# ========================
+networks:
+  app-network:
+    driver: bridge
