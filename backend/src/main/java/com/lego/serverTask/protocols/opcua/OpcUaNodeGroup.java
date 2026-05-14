@@ -43,6 +43,7 @@ public class OpcUaNodeGroup {
     @Setter
     private List<OpcUaNode> nodeList;
 
+    //full table name : is the table name in the database
     @Getter
     @Setter
     private String fullTableName;

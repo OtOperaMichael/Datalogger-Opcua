@@ -20,15 +20,13 @@ import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaSubscription;
 import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription;
 
 import java.lang.reflect.Array;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -61,8 +59,11 @@ public class OpcuaDatalogger {
     // 引用全局队列
     private final GlobalDataQueue globalDataQueue;
 
-    // 存储每个 nodeGroup 对应的 subscription，用于分组管理
-    private Map<String, OpcUaSubscription> subscriptionMap = new HashMap<>();
+    // 单一订阅，管理所有监控项
+    private OpcUaSubscription mainSubscription;
+    
+    // 保存 nodeGroup 名称到监控项列表的映射，用于数据处理时区分
+    private Map<String, List<OpcUaMonitoredItem>> nodeGroupMonitoredItemsMap = new HashMap<>();
 
     // 保存 client 引用,用于关闭时断开连接
     private OpcUaClient client;
@@ -240,8 +241,9 @@ public class OpcuaDatalogger {
                 .setEndpoint(fixedEndpoint)
                 .setSessionTimeout(UInteger.valueOf(60000))
                 .setRequestTimeout(UInteger.valueOf(10000))
-                .setKeepAliveInterval(UInteger.valueOf(5000))
-                .setKeepAliveFailuresAllowed(UInteger.valueOf(3))
+                .setMaxPendingPublishRequests(UInteger.valueOf(1))
+                .setKeepAliveInterval(UInteger.valueOf(30000))
+                .setKeepAliveFailuresAllowed(UInteger.valueOf(5))
                 .build();
         client = OpcUaClient.create(config);
 
@@ -272,26 +274,132 @@ public class OpcuaDatalogger {
     }
 
     /**
-     * 创建所有模块的订阅
+     * 创建所有模块的订阅 - 使用单一 Subscription 管理所有监控项
+     * Publish Interval = 所有 group 的 sampling interval 的最小值
      */
     private void createSubscriptions() throws Exception {
+        if (customModuleNodeGroupList.isEmpty() && alarmModuleNodeGroupList.isEmpty() && commModuleNodeGroupList.isEmpty()) {
+            LogUtil.logWarning(true, serverName, "No node groups to subscribe");
+            return;
+        }
+
+        // 找到最小的采样间隔作为订阅的发布间隔
+        Integer minSampleInterval = Integer.MAX_VALUE;
+        
+        for (CustomOpcUaNodeGroup ng : customModuleNodeGroupList) {
+            minSampleInterval = Math.min(minSampleInterval, ng.getSampleInterval());
+        }
+        for (AlarmOpcUaNodeGroup ng : alarmModuleNodeGroupList) {
+            minSampleInterval = Math.min(minSampleInterval, ng.getSampleInterval());
+        }
+        for (CommOpcUaNodeGroup ng : commModuleNodeGroupList) {
+            minSampleInterval = Math.min(minSampleInterval, ng.getSampleInterval());
+        }
+
+        LogUtil.logInfo(true, serverName, "Creating single subscription with publishing interval: {} ms (min of all sampling intervals)", 
+                minSampleInterval);
+
+        // 创建唯一的订阅
+        mainSubscription = new OpcUaSubscription(client);
+        mainSubscription.setPublishingInterval(Double.valueOf(minSampleInterval));
+        mainSubscription.setLifetimeCount(UInteger.valueOf(1000));
+        mainSubscription.setMaxKeepAliveCount(UInteger.valueOf(10));
+        mainSubscription.setMaxNotificationsPerPublish(UInteger.valueOf(500));
+        mainSubscription.setPriority(UByte.valueOf((short) 1));
+
+        // 设置订阅级别的数据变化监听器
+        mainSubscription.setSubscriptionListener(new OpcUaSubscription.SubscriptionListener() {
+            @Override
+            public void onDataReceived(OpcUaSubscription subscription, List<OpcUaMonitoredItem> items, List<DataValue> values) {
+                handleDataChangeFromSingleSubscription(items, values);
+            }
+        });
+
+        // 在服务器上创建订阅
+        mainSubscription.create();
+
+        // 为所有 nodeGroup 添加监控项，每个监控项使用自己的采样间隔
+        int totalItems = 0;
+        
         if (customModuleIsEnabled) {
             for (CustomOpcUaNodeGroup nodeGroup : customModuleNodeGroupList) {
-                createSubscriptionForNodeGroup(client, nodeGroup);
+                totalItems += addMonitoredItemsForNodeGroup(nodeGroup);
             }
         }
 
         if (alarmModuleIsEnabled) {
             for (AlarmOpcUaNodeGroup nodeGroup : alarmModuleNodeGroupList) {
-                createSubscriptionForNodeGroup(client, nodeGroup);
+                totalItems += addMonitoredItemsForNodeGroup(nodeGroup);
             }
         }
 
         if (communicationModuleIsEnabled) {
             for (CommOpcUaNodeGroup nodeGroup : commModuleNodeGroupList) {
-                createSubscriptionForNodeGroup(client, nodeGroup);
+                totalItems += addMonitoredItemsForNodeGroup(nodeGroup);
             }
         }
+
+        // 同步所有监控项到服务器
+        try {
+            mainSubscription.synchronizeMonitoredItems();
+            LogUtil.logInfo(true, serverName, "Successfully synchronized {} monitored items across {} node groups", 
+                    totalItems, nodeGroupMonitoredItemsMap.size());
+        } catch (MonitoredItemSynchronizationException e) {
+            LogUtil.logError(true, serverName, "Failed to synchronize monitored items", e);
+            e.getCreateResults().forEach(result ->
+                    LogUtil.logError(true, serverName, "Failed to create item: nodeId={}, serviceResult={}, operationResult={}",
+                            result.monitoredItem().getReadValueId().getNodeId(),
+                            result.serviceResult(),
+                            result.operationResult())
+            );
+        }
+
+        LogUtil.logInfo(true, serverName, "Single subscription created successfully with {} node groups and {} total monitored items", 
+                nodeGroupMonitoredItemsMap.size(), totalItems);
+    }
+
+    /**
+     * 为单个 nodeGroup 添加监控项到主订阅
+     * 每个 nodeGroup 使用自己配置的采样间隔
+     * 
+     * @return 添加的监控项数量
+     */
+    private int addMonitoredItemsForNodeGroup(OpcUaNodeGroup nodeGroup) throws Exception {
+        String groupName = nodeGroup.getModuleType().toString().toLowerCase() + "_" + nodeGroup.getName();
+        Integer sampleInterval = nodeGroup.getSampleInterval();
+        List<OpcUaMonitoredItem> groupItems = new ArrayList<>();
+
+        LogUtil.logInfo(true, serverName, "Adding monitored items for nodeGroup: {} with sampling interval: {} ms", 
+                groupName, sampleInterval);
+
+        if (nodeGroup.getNodeType() == NodeGroupType.ARRAY) {
+            // ARRAY 类型：只添加数组的第一个元素到订阅
+            OpcUaNode node = nodeGroup.getNodeList().get(0);
+            OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
+            monitoredItem.setSamplingInterval(sampleInterval);
+            monitoredItem.setQueueSize(UInteger.valueOf(1));
+            mainSubscription.addMonitoredItem(monitoredItem);
+            groupItems.add(monitoredItem);
+            LogUtil.logInfo(true, serverName, "Added array monitored item for node: {},{} in group: {} (sampling: {} ms)", 
+                    node.getName(), node.getNodeId(), groupName, sampleInterval);
+
+        } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
+            // SCALAR 类型：为每个节点创建监控项
+            for (OpcUaNode node : nodeGroup.getNodeList()) {
+                OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
+                monitoredItem.setSamplingInterval(sampleInterval);
+                monitoredItem.setQueueSize(UInteger.valueOf(1));
+                mainSubscription.addMonitoredItem(monitoredItem);
+                groupItems.add(monitoredItem);
+                LogUtil.logDebugL1(true, serverName, "Added scalar monitored item for node: {},{} in group: {} (sampling: {} ms)", 
+                        node.getName(), node.getNodeId(), groupName, sampleInterval);
+            }
+        }
+
+        // 保存该 nodeGroup 的监控项列表
+        nodeGroupMonitoredItemsMap.put(groupName, groupItems);
+        
+        return groupItems.size();
     }
 
     /**
@@ -372,16 +480,20 @@ public class OpcuaDatalogger {
      * 清理当前连接资源（不断开连接状态标记）
      */
     private void cleanupConnection() {
-        if (!subscriptionMap.isEmpty()) {
-            LogUtil.logInfo(true, serverName, "Cleaning up {} subscriptions...", subscriptionMap.size());
-            for (Map.Entry<String, OpcUaSubscription> entry : subscriptionMap.entrySet()) {
-                try {
-                    entry.getValue().delete();
-                } catch (Exception e) {
-                    LogUtil.logWarning(true, serverName, "Error deleting subscription {}: {}", entry.getKey(), e.getMessage());
-                }
+        if (mainSubscription != null) {
+            try {
+                mainSubscription.delete();
+                LogUtil.logInfo(true, serverName, "Deleted main subscription");
+            } catch (Exception e) {
+                LogUtil.logWarning(true, serverName, "Error deleting main subscription: {}", e.getMessage());
             }
-            subscriptionMap.clear();
+            mainSubscription = null;
+        }
+
+        if (!nodeGroupMonitoredItemsMap.isEmpty()) {
+            LogUtil.logInfo(true, serverName, "Clearing {} node group monitored items mappings", 
+                    nodeGroupMonitoredItemsMap.size());
+            nodeGroupMonitoredItemsMap.clear();
         }
 
         if (client != null) {
@@ -474,219 +586,154 @@ public class OpcuaDatalogger {
     }
 
     /**
-     * 为单个 nodeGroup 创建独立的 subscription
+     * 从单一订阅处理数据变化
+     * 自动识别变化的 items 属于哪个 nodeGroup，并更新对应的值
      *
-     * @param client    OPC UA 客户端
-     * @param nodeGroup 节点组
+     * @param items  监控项列表
+     * @param values 数据值列表
      */
-    private void createSubscriptionForNodeGroup(OpcUaClient client, OpcUaNodeGroup nodeGroup) throws Exception {
-        String groupName = nodeGroup.getModuleType().toString().toLowerCase() + "_" + nodeGroup.getName();
-        Integer sampleInterval = nodeGroup.getSampleInterval();
-        LogUtil.logInfo(true, serverName, "Creating subscription for nodeGroup: {}", groupName);
-
-        // 首先读取节点组中的所有节点并更新，防止有数据永远不变导致获取不到真实值
-
-        // 创建订阅
-        OpcUaSubscription subscription = new OpcUaSubscription(client);
-        subscription.setPublishingInterval(Double.valueOf(sampleInterval));
-
-        // 设置订阅级别的数据变化监听器
-        subscription.setSubscriptionListener(new OpcUaSubscription.SubscriptionListener() {
-            @Override
-            public void onDataReceived(OpcUaSubscription subscription, List<OpcUaMonitoredItem> items, List<DataValue> values) {
-                // 处理该 nodeGroup 的数据
-                handleDataChange(nodeGroup, items, values);
-            }
-        });
-
-        // 在服务器上创建订阅
-        subscription.create();
-
-        // 根据节点类型添加监控项
-        if (nodeGroup.getNodeType() == NodeGroupType.ARRAY) {
-            // 只添加数组的第一个元素到订阅
-            OpcUaNode node = nodeGroup.getNodeList().get(0);
-            OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
-            monitoredItem.setSamplingInterval(sampleInterval);
-
-            // 添加监控项到该 nodeGroup 的订阅
-            subscription.addMonitoredItem(monitoredItem);
-            LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{} in group: {}", node.getName(), node.getNodeId(), groupName);
-
-        } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
-            // 为 SCALAR 类型的每个节点创建监控项
-            for (OpcUaNode node : nodeGroup.getNodeList()) {
-                OpcUaMonitoredItem monitoredItem = OpcUaMonitoredItem.newDataItem(node.getNodeId());
-                monitoredItem.setSamplingInterval(sampleInterval);
-
-                // 添加监控项到该 nodeGroup 的订阅
-                subscription.addMonitoredItem(monitoredItem);
-                LogUtil.logInfo(true, serverName, "Added monitored item for node: {},{}  in group: {}", node.getName(), node.getNodeId(), groupName);
-            }
-        }
-
-        // 同步监控项到服务器
+    private void handleDataChangeFromSingleSubscription(List<OpcUaMonitoredItem> items, List<DataValue> values) {
         try {
-            subscription.synchronizeMonitoredItems();
-            LogUtil.logInfo(true, serverName, "Successfully synchronized monitored items for nodeGroup: {}", groupName);
-        } catch (MonitoredItemSynchronizationException e) {
-            LogUtil.logError(true, serverName, "Failed to synchronize monitored items for nodeGroup: {}", groupName, e);
-            e.getCreateResults().forEach(result ->
-                    LogUtil.logError(true, serverName, "Failed to create item: nodeId={}, serviceResult={}, operationResult={}",
-                            result.monitoredItem().getReadValueId().getNodeId(),
-                            result.serviceResult(),
-                            result.operationResult())
-            );
-        }
-
-        // 将 subscription 保存到 map 中，方便后续管理
-        subscriptionMap.put(groupName, subscription);
-        LogUtil.logInfo(true, serverName, "Subscription created successfully for nodeGroup: {}", groupName);
-    }
-
-    /**
-     * 处理 OPC UA 节点数据变化
-     * 策略：
-     * - SCALAR 类型：每个节点独立订阅，分别更新
-     * - ARRAY 类型：只订阅第一个节点，收到数组后拆分赋值给所有节点
-     *
-     * @param nodeGroup 节点组
-     * @param items     监控项列表
-     * @param values    数据值列表
-     */
-    private void handleDataChange(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
-        try {
-            // 参数验证
             if (items == null || values == null || items.isEmpty() || values.isEmpty()) {
-                LogUtil.logWarning(true, serverName, "Received empty data for nodeGroup: {}", nodeGroup.getName());
+                LogUtil.logWarning(true, serverName, "Received empty data from subscription");
                 return;
             }
 
             if (items.size() != values.size()) {
-                LogUtil.logWarning(true, serverName, "Items and values size mismatch for nodeGroup: {}", nodeGroup.getName());
+                LogUtil.logWarning(true, serverName, "Items and values size mismatch: items={}, values={}", 
+                        items.size(), values.size());
                 return;
             }
 
-            String groupName = nodeGroup.getName();
-            boolean hasChanges = false;
+            // 收集有变化的 nodeGroup（去重）
+            Set<OpcUaNodeGroup> changedNodeGroups = new HashSet<>();
 
-            // 根据节点组类型采用不同的处理策略
-            if (nodeGroup.getNodeType() == NodeGroupType.ARRAY) {
-                // ARRAY 类型：处理数组数据，拆分后赋值给各个节点
-                hasChanges = updateArrayData(nodeGroup, items, values);
-            } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
-                // SCALAR 类型：每个节点独立更新
-                hasChanges = updateScalarData(nodeGroup, items, values);
+            // 遍历所有收到的数据变化
+            for (int i = 0; i < items.size(); i++) {
+                OpcUaMonitoredItem item = items.get(i);
+                DataValue dataValue = values.get(i);
+
+                if (dataValue.getValue() == null) {
+                    continue;
+                }
+
+                // 获取节点 ID
+                NodeId nodeId = item.getReadValueId().getNodeId();
+
+                // 根据 nodeId 找到对应的 nodeGroup
+                OpcUaNodeGroup targetNodeGroup = findNodeGroupByNodeId(nodeId);
+                
+                if (targetNodeGroup == null) {
+                    LogUtil.logWarning(true, serverName, "Cannot find nodeGroup for nodeId: {}", nodeId);
+                    continue;
+                }
+
+                // 处理数据更新
+                boolean hasChange = false;
+                if (targetNodeGroup.getNodeType() == NodeGroupType.ARRAY) {
+                    hasChange = updateArrayDataForSingleNode(targetNodeGroup, dataValue);
+                } else if (targetNodeGroup.getNodeType() == NodeGroupType.SCALAR) {
+                    hasChange = updateScalarNode(targetNodeGroup, nodeId, dataValue);
+                }
+
+                // 标记该 nodeGroup 有变化
+                if (hasChange) {
+                    changedNodeGroups.add(targetNodeGroup);
+                }
             }
 
-            // 如果有节点发生变化，将数据入队
-            if (hasChanges) {
-                // 检查是否有节点值为 null
-                for (OpcUaNode node : nodeGroup.getNodeList()) {
-                    if (node.getNewValue() == null) {
-                        LogUtil.logWarning(true, serverName, "Node {} in group {} has no value yet",
-                                node.getName(), groupName);
-                    }
-                }
-                if (nodeGroup.getModuleType() == ModuleType.CUSTOM) {
-                    // 将数据入队
-                    boolean success = globalDataQueue.enqueueCustomData(serverName, (CustomOpcUaNodeGroup) nodeGroup);
-
-                    if (success) {
-//                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
-//                                ModuleType.CUSTOM.toString(), groupName, nodeGroup.getNodeList().size());
-                    } else {
-                        LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {}_{} - queue may be full", ModuleType.CUSTOM.toString(), groupName);
-                    }
-                }
-
-                if (nodeGroup.getModuleType() == ModuleType.ALARM) {
-                    // 将数据入队
-                    boolean success = globalDataQueue.enqueueAlarmData(serverName, (AlarmOpcUaNodeGroup) nodeGroup);
-
-                    if (success) {
-//                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
-//                                ModuleType.ALARM.toString(), groupName, nodeGroup.getNodeList().size());
-                    }
-                }
-
-                if (nodeGroup.getModuleType() == ModuleType.COMMUNICATION) {
-                    // 将数据入队
-                    boolean success = globalDataQueue.enqueueCommunicationData(serverName, (CommOpcUaNodeGroup) nodeGroup);
-
-                    if (success) {
-//                        LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
-//                                ModuleType.COMMUNICATION.toString(), groupName, nodeGroup.getNodeList().size());
-                    } else {
-                        LogUtil.logWarning(true, serverName, "Failed to enqueue data for nodeGroup: {}_{} - queue may be full", ModuleType.COMMUNICATION.toString(), groupName);
-                    }
-                }
+            // 对所有有变化的 nodeGroup 进行入队处理
+            for (OpcUaNodeGroup nodeGroup : changedNodeGroups) {
+                enqueueNodeGroupData(nodeGroup);
             }
 
         } catch (Exception e) {
-            LogUtil.logError(true, serverName, "Error handling data change for nodeGroup {}: {}",
-                    nodeGroup.getName(), e.getMessage());
+            LogUtil.logError(true, serverName, "Error handling data change from subscription: {}", e.getMessage());
             e.printStackTrace();
         }
     }
 
     /**
-     * 处理 SCALAR 类型的节点数据
-     * 每个节点独立订阅，分别更新
-     *
-     * @param nodeGroup 节点组
-     * @param items     监控项列表
-     * @param values    数据值列表
-     * @return 是否有节点发生变化
+     * 根据 NodeId 查找对应的 nodeGroup
+     * 通过遍历所有 nodeGroup 的监控项来匹配
      */
-    private boolean updateScalarData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
-        boolean hasChanges = false;
+    private OpcUaNodeGroup findNodeGroupByNodeId(NodeId nodeId) {
+        // 遍历所有 nodeGroup 的监控项映射
+        for (Map.Entry<String, List<OpcUaMonitoredItem>> entry : nodeGroupMonitoredItemsMap.entrySet()) {
+            String groupName = entry.getKey();
+            List<OpcUaMonitoredItem> groupItems = entry.getValue();
+            
+            // 检查该 group 中是否有匹配的监控项
+            for (OpcUaMonitoredItem item : groupItems) {
+                if (item.getReadValueId().getNodeId().equals(nodeId)) {
+                    // 找到匹配的 group，返回对应的 nodeGroup 对象
+                    return findNodeGroupByName(groupName);
+                }
+            }
+        }
+        
+        return null;
+    }
 
-        for (int i = 0; i < items.size(); i++) {
-            OpcUaMonitoredItem item = items.get(i);
-            DataValue dataValue = values.get(i);
+    /**
+     * 根据 nodeGroup 名称查找对应的对象
+     */
+    private OpcUaNodeGroup findNodeGroupByName(String groupName) {
+        // 从 groupName 中提取模块类型和表名
+        // 格式: moduletype_tablename
+        String[] parts = groupName.split("_", 2);
+        if (parts.length != 2) {
+            return null;
+        }
 
-            // 获取节点 ID
-            NodeId nodeId = item.getReadValueId().getNodeId();
+        String moduleType = parts[0];
+        String tableName = parts[1];
 
-            // 在 nodeGroup 中找到对应的 OpcUaNode
-            OpcUaNode matchingNode = findNodeByNodeId(nodeGroup, nodeId);
-
-            if (matchingNode != null && dataValue.getValue() != null) {
-                Object value = dataValue.getValue().getValue();
-
-                if (value != null) {
-                    // 更新节点值（会自动保存 oldValue）
-                    matchingNode.updateValue(value);
-                    hasChanges = true;
-
-//                    LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
-//                            nodeGroup.getName(), matchingNode.getName(), matchingNode.getOldValue(), matchingNode.getNewValue());
-
+        if ("custom".equals(moduleType)) {
+            for (CustomOpcUaNodeGroup ng : customModuleNodeGroupList) {
+                if (ng.getName().equals(tableName)) {
+                    return ng;
+                }
+            }
+        } else if ("alarm".equals(moduleType)) {
+            for (AlarmOpcUaNodeGroup ng : alarmModuleNodeGroupList) {
+                if (ng.getName().equals(tableName)) {
+                    return ng;
+                }
+            }
+        } else if ("communication".equals(moduleType)) {
+            for (CommOpcUaNodeGroup ng : commModuleNodeGroupList) {
+                if (ng.getName().equals(tableName)) {
+                    return ng;
                 }
             }
         }
 
-        return hasChanges;
+        return null;
     }
 
     /**
-     * 处理 ARRAY 类型的节点数据
-     * 只订阅了第一个节点，但收到的是整个数组，需要拆分后赋值给各个节点
-     *
-     * @param nodeGroup 节点组
-     * @param items     监控项列表（只有一个元素）
-     * @param values    数据值列表（只有一个元素，包含数组）
-     * @return 是否有节点发生变化
+     * 更新 SCALAR 类型的单个节点
      */
-    private boolean updateArrayData(OpcUaNodeGroup nodeGroup, List<OpcUaMonitoredItem> items, List<DataValue> values) {
-        // ARRAY 类型应该只有一个监控项（订阅的第一个节点）
-        if (items.size() != 1 || values.size() != 1) {
-            LogUtil.logWarning(true, serverName, "ARRAY nodeGroup should have only 1 monitored item, but got {}", items.size());
+    private boolean updateScalarNode(OpcUaNodeGroup nodeGroup, NodeId nodeId, DataValue dataValue) {
+        Object value = dataValue.getValue().getValue();
+        if (value == null) {
             return false;
         }
 
-        DataValue dataValue = values.get(0);
+        OpcUaNode matchingNode = findNodeByNodeId(nodeGroup, nodeId);
+        if (matchingNode != null) {
+            matchingNode.updateValue(value);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 更新 ARRAY 类型的数据（从单个节点接收数组）
+     */
+    private boolean updateArrayDataForSingleNode(OpcUaNodeGroup nodeGroup, DataValue dataValue) {
         if (dataValue.getValue() == null) {
             LogUtil.logWarning(true, serverName, "Received null value for ARRAY nodeGroup: {}", nodeGroup.getName());
             return false;
@@ -723,18 +770,10 @@ public class OpcuaDatalogger {
             }
 
             if (elementValue != null) {
-                // 更新节点值
                 node.updateValue(elementValue);
                 hasChanges = true;
-
-//                LogUtil.logDebugL1(true, serverName, "Node {}-{} updated: {} -> {}",
-//                        nodeGroup.getName(), node.getName(), node.getOldValue(), node.getNewValue());
-
             }
         }
-
-//        LogUtil.logDebugL1(true, serverName, "ARRAY nodeGroup {} processed: {} elements from array of length {}",
-//                nodeGroup.getName(), nodeList.size(), arrayLength);
 
         return hasChanges;
     }
@@ -750,4 +789,35 @@ public class OpcuaDatalogger {
         return nodeGroup.getNodeByNodeId(nodeId);
     }
 
+    /**
+     * 将 nodeGroup 的数据入队
+     */
+    private void enqueueNodeGroupData(OpcUaNodeGroup nodeGroup) {
+        String groupName = nodeGroup.getName();
+
+        // 检查是否有节点值为 null
+        for (OpcUaNode node : nodeGroup.getNodeList()) {
+            if (node.getNewValue() == null) {
+                LogUtil.logWarning(true, serverName, "Node {} in group {} has no value yet",
+                        node.getName(), groupName);
+            }
+        }
+
+        if (nodeGroup.getModuleType() == ModuleType.CUSTOM) {
+            boolean success = globalDataQueue.enqueueCustomData(serverName, (CustomOpcUaNodeGroup) nodeGroup);
+            if (!success) {
+                LogUtil.logWarning(true, serverName, "Failed to enqueue CUSTOM data for nodeGroup: {} - queue may be full", groupName);
+            }
+        } else if (nodeGroup.getModuleType() == ModuleType.ALARM) {
+            boolean success = globalDataQueue.enqueueAlarmData(serverName, (AlarmOpcUaNodeGroup) nodeGroup);
+            if (!success) {
+                LogUtil.logWarning(true, serverName, "Failed to enqueue ALARM data for nodeGroup: {}", groupName);
+            }
+        } else if (nodeGroup.getModuleType() == ModuleType.COMMUNICATION) {
+            boolean success = globalDataQueue.enqueueCommunicationData(serverName, (CommOpcUaNodeGroup) nodeGroup);
+            if (!success) {
+                LogUtil.logWarning(true, serverName, "Failed to enqueue COMMUNICATION data for nodeGroup: {} - queue may be full", groupName);
+            }
+        }
+    }
 }
