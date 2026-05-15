@@ -620,25 +620,28 @@ public class OpcuaDatalogger {
                 // 获取节点 ID
                 NodeId nodeId = item.getReadValueId().getNodeId();
 
-                // 根据 nodeId 找到对应的 nodeGroup
-                OpcUaNodeGroup targetNodeGroup = findNodeGroupByNodeId(nodeId);
+                // 根据 nodeId 找到对应的所有 nodeGroup
+                List<OpcUaNodeGroup> targetNodeGroups = findNodeGroupByNodeId(nodeId);
 
-                if (targetNodeGroup == null) {
-                    LogUtil.logWarning(true, serverName, "Cannot find nodeGroup for nodeId: {}", nodeId);
+                if (targetNodeGroups.isEmpty()) {
+                    LogUtil.logWarning(true, serverName, "Cannot find any nodeGroup for nodeId: {}", nodeId);
                     continue;
                 }
 
-                // 处理数据更新
-                boolean hasChange = false;
-                if (targetNodeGroup.getNodeType() == NodeGroupType.ARRAY) {
-                    hasChange = updateArrayDataForSingleNode(targetNodeGroup, dataValue);
-                } else if (targetNodeGroup.getNodeType() == NodeGroupType.SCALAR) {
-                    hasChange = updateScalarNode(targetNodeGroup, nodeId, dataValue);
-                }
+                // 处理每个匹配的 nodeGroup
+                for (OpcUaNodeGroup targetNodeGroup : targetNodeGroups) {
+                    // 处理数据更新
+                    boolean hasChange = false;
+                    if (targetNodeGroup.getNodeType() == NodeGroupType.ARRAY) {
+                        hasChange = updateArrayDataForSingleNode(targetNodeGroup, dataValue);
+                    } else if (targetNodeGroup.getNodeType() == NodeGroupType.SCALAR) {
+                        hasChange = updateScalarNode(targetNodeGroup, nodeId, dataValue);
+                    }
 
-                // 标记该 nodeGroup 有变化
-                if (hasChange) {
-                    changedNodeGroups.add(targetNodeGroup);
+                    // 标记该 nodeGroup 有变化
+                    if (hasChange) {
+                        changedNodeGroups.add(targetNodeGroup);
+                    }
                 }
             }
 
@@ -654,10 +657,13 @@ public class OpcuaDatalogger {
     }
 
     /**
-     * 根据 NodeId 查找对应的 nodeGroup
+     * 根据 NodeId 查找对应的所有 nodeGroup
      * 通过遍历所有 nodeGroup 的监控项来匹配
+     * @return 包含该 nodeId 的所有 nodeGroup 集合
      */
-    private OpcUaNodeGroup findNodeGroupByNodeId(NodeId nodeId) {
+    private List<OpcUaNodeGroup> findNodeGroupByNodeId(NodeId nodeId) {
+        List<OpcUaNodeGroup> matchingNodeGroups = new ArrayList<>();
+        
         // 遍历所有 nodeGroup 的监控项映射
         for (Map.Entry<String, List<OpcUaMonitoredItem>> entry : nodeGroupMonitoredItemsMap.entrySet()) {
             String groupName = entry.getKey();
@@ -666,13 +672,17 @@ public class OpcuaDatalogger {
             // 检查该 group 中是否有匹配的监控项
             for (OpcUaMonitoredItem item : groupItems) {
                 if (item.getReadValueId().getNodeId().equals(nodeId)) {
-                    // 找到匹配的 group，返回对应的 nodeGroup 对象
-                    return findNodeGroupByName(groupName);
+                    // 找到匹配的 group，添加到结果列表中
+                    OpcUaNodeGroup nodeGroup = findNodeGroupByName(groupName);
+                    if (nodeGroup != null) {
+                        matchingNodeGroups.add(nodeGroup);
+                    }
+                    break; // 每个 group 只需添加一次
                 }
             }
         }
 
-        return null;
+        return matchingNodeGroups;
     }
 
     /**
