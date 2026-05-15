@@ -61,7 +61,7 @@ public class OpcuaDatalogger {
 
     // 单一订阅，管理所有监控项
     private OpcUaSubscription mainSubscription;
-    
+
     // 保存 nodeGroup 名称到监控项列表的映射，用于数据处理时区分
     private Map<String, List<OpcUaMonitoredItem>> nodeGroupMonitoredItemsMap = new HashMap<>();
 
@@ -194,7 +194,7 @@ public class OpcuaDatalogger {
 
         try {
             connectAndSubscribe();
-            
+
             isRunning = true;
             LogUtil.logInfo(true, serverName, "Server {} started successfully", serverName);
 
@@ -285,7 +285,7 @@ public class OpcuaDatalogger {
 
         // 找到最小的采样间隔作为订阅的发布间隔
         Integer minSampleInterval = Integer.MAX_VALUE;
-        
+
         for (CustomOpcUaNodeGroup ng : customModuleNodeGroupList) {
             minSampleInterval = Math.min(minSampleInterval, ng.getSampleInterval());
         }
@@ -296,7 +296,7 @@ public class OpcuaDatalogger {
             minSampleInterval = Math.min(minSampleInterval, ng.getSampleInterval());
         }
 
-        LogUtil.logInfo(true, serverName, "Creating single subscription with publishing interval: {} ms (min of all sampling intervals)", 
+        LogUtil.logInfo(true, serverName, "Creating single subscription with publishing interval: {} ms (min of all sampling intervals)",
                 minSampleInterval);
 
         // 创建唯一的订阅
@@ -320,7 +320,7 @@ public class OpcuaDatalogger {
 
         // 为所有 nodeGroup 添加监控项，每个监控项使用自己的采样间隔
         int totalItems = 0;
-        
+
         if (customModuleIsEnabled) {
             for (CustomOpcUaNodeGroup nodeGroup : customModuleNodeGroupList) {
                 totalItems += addMonitoredItemsForNodeGroup(nodeGroup);
@@ -342,7 +342,7 @@ public class OpcuaDatalogger {
         // 同步所有监控项到服务器
         try {
             mainSubscription.synchronizeMonitoredItems();
-            LogUtil.logInfo(true, serverName, "Successfully synchronized {} monitored items across {} node groups", 
+            LogUtil.logInfo(true, serverName, "Successfully synchronized {} monitored items across {} node groups",
                     totalItems, nodeGroupMonitoredItemsMap.size());
         } catch (MonitoredItemSynchronizationException e) {
             LogUtil.logError(true, serverName, "Failed to synchronize monitored items", e);
@@ -354,14 +354,14 @@ public class OpcuaDatalogger {
             );
         }
 
-        LogUtil.logInfo(true, serverName, "Single subscription created successfully with {} node groups and {} total monitored items", 
+        LogUtil.logInfo(true, serverName, "Single subscription created successfully with {} node groups and {} total monitored items",
                 nodeGroupMonitoredItemsMap.size(), totalItems);
     }
 
     /**
      * 为单个 nodeGroup 添加监控项到主订阅
      * 每个 nodeGroup 使用自己配置的采样间隔
-     * 
+     *
      * @return 添加的监控项数量
      */
     private int addMonitoredItemsForNodeGroup(OpcUaNodeGroup nodeGroup) throws Exception {
@@ -369,7 +369,7 @@ public class OpcuaDatalogger {
         Integer sampleInterval = nodeGroup.getSampleInterval();
         List<OpcUaMonitoredItem> groupItems = new ArrayList<>();
 
-        LogUtil.logInfo(true, serverName, "Adding monitored items for nodeGroup: {} with sampling interval: {} ms", 
+        LogUtil.logInfo(true, serverName, "Adding monitored items for nodeGroup: {} with sampling interval: {} ms",
                 groupName, sampleInterval);
 
         if (nodeGroup.getNodeType() == NodeGroupType.ARRAY) {
@@ -380,7 +380,7 @@ public class OpcuaDatalogger {
             monitoredItem.setQueueSize(UInteger.valueOf(1));
             mainSubscription.addMonitoredItem(monitoredItem);
             groupItems.add(monitoredItem);
-            LogUtil.logInfo(true, serverName, "Added array monitored item for node: {},{} in group: {} (sampling: {} ms)", 
+            LogUtil.logInfo(true, serverName, "Added array monitored item for node: {},{} in group: {} (sampling: {} ms)",
                     node.getName(), node.getNodeId(), groupName, sampleInterval);
 
         } else if (nodeGroup.getNodeType() == NodeGroupType.SCALAR) {
@@ -391,14 +391,14 @@ public class OpcuaDatalogger {
                 monitoredItem.setQueueSize(UInteger.valueOf(1));
                 mainSubscription.addMonitoredItem(monitoredItem);
                 groupItems.add(monitoredItem);
-                LogUtil.logDebugL1(true, serverName, "Added scalar monitored item for node: {},{} in group: {} (sampling: {} ms)", 
+                LogUtil.logDebugL1(true, serverName, "Added scalar monitored item for node: {},{} in group: {} (sampling: {} ms)",
                         node.getName(), node.getNodeId(), groupName, sampleInterval);
             }
         }
 
         // 保存该 nodeGroup 的监控项列表
         nodeGroupMonitoredItemsMap.put(groupName, groupItems);
-        
+
         return groupItems.size();
     }
 
@@ -411,7 +411,7 @@ public class OpcuaDatalogger {
         }
 
         LogUtil.logWarning(true, serverName, "Connection lost, scheduling reconnection...");
-        
+
         if (reconnectExecutor == null || reconnectExecutor.isShutdown()) {
             reconnectExecutor = new ScheduledThreadPoolExecutor(1, r -> {
                 Thread thread = new Thread(r, "Reconnect-Thread-" + serverName);
@@ -491,7 +491,7 @@ public class OpcuaDatalogger {
         }
 
         if (!nodeGroupMonitoredItemsMap.isEmpty()) {
-            LogUtil.logInfo(true, serverName, "Clearing {} node group monitored items mappings", 
+            LogUtil.logInfo(true, serverName, "Clearing {} node group monitored items mappings",
                     nodeGroupMonitoredItemsMap.size());
             nodeGroupMonitoredItemsMap.clear();
         }
@@ -600,7 +600,7 @@ public class OpcuaDatalogger {
             }
 
             if (items.size() != values.size()) {
-                LogUtil.logWarning(true, serverName, "Items and values size mismatch: items={}, values={}", 
+                LogUtil.logWarning(true, serverName, "Items and values size mismatch: items={}, values={}",
                         items.size(), values.size());
                 return;
             }
@@ -622,7 +622,7 @@ public class OpcuaDatalogger {
 
                 // 根据 nodeId 找到对应的 nodeGroup
                 OpcUaNodeGroup targetNodeGroup = findNodeGroupByNodeId(nodeId);
-                
+
                 if (targetNodeGroup == null) {
                     LogUtil.logWarning(true, serverName, "Cannot find nodeGroup for nodeId: {}", nodeId);
                     continue;
@@ -662,7 +662,7 @@ public class OpcuaDatalogger {
         for (Map.Entry<String, List<OpcUaMonitoredItem>> entry : nodeGroupMonitoredItemsMap.entrySet()) {
             String groupName = entry.getKey();
             List<OpcUaMonitoredItem> groupItems = entry.getValue();
-            
+
             // 检查该 group 中是否有匹配的监控项
             for (OpcUaMonitoredItem item : groupItems) {
                 if (item.getReadValueId().getNodeId().equals(nodeId)) {
@@ -671,7 +671,7 @@ public class OpcuaDatalogger {
                 }
             }
         }
-        
+
         return null;
     }
 
@@ -805,18 +805,21 @@ public class OpcuaDatalogger {
 
         if (nodeGroup.getModuleType() == ModuleType.CUSTOM) {
             boolean success = globalDataQueue.enqueueCustomData(serverName, (CustomOpcUaNodeGroup) nodeGroup);
-            if (!success) {
-                LogUtil.logWarning(true, serverName, "Failed to enqueue CUSTOM data for nodeGroup: {} - queue may be full", groupName);
+            if (success) {
+                LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+                        ModuleType.CUSTOM.toString(), groupName, nodeGroup.getNodeList().size());
             }
         } else if (nodeGroup.getModuleType() == ModuleType.ALARM) {
             boolean success = globalDataQueue.enqueueAlarmData(serverName, (AlarmOpcUaNodeGroup) nodeGroup);
-            if (!success) {
-                LogUtil.logWarning(true, serverName, "Failed to enqueue ALARM data for nodeGroup: {}", groupName);
+            if (success) {
+                LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+                        ModuleType.ALARM.toString(), groupName, nodeGroup.getNodeList().size());
             }
         } else if (nodeGroup.getModuleType() == ModuleType.COMMUNICATION) {
             boolean success = globalDataQueue.enqueueCommunicationData(serverName, (CommOpcUaNodeGroup) nodeGroup);
-            if (!success) {
-                LogUtil.logWarning(true, serverName, "Failed to enqueue COMMUNICATION data for nodeGroup: {} - queue may be full", groupName);
+            if (success) {
+                LogUtil.logDebugL1(true, serverName, "Data enqueued successfully for nodeGroup: {}_{}, nodes count: {}",
+                        ModuleType.COMMUNICATION.toString(), groupName, nodeGroup.getNodeList().size());
             }
         }
     }

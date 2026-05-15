@@ -103,25 +103,25 @@ const items = ref<MenuProps['items']>([
 
 async function reInit() {
   Modal.confirm({
-    title: '确认重置？',
-    content: '此操作将删除所有数据库配置（MySQL 和 InfluxDB），并返回初始设置页面。是否继续？',
-    okText: '确定',
+    title: 'Confirm reset?',
+    content: 'This operation will delete all configurations (database and system config) and return to the initial setup page. Continue?',
+    okText: 'Confirm',
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: 'Cancel',
     onOk: async () => {
       try {
         const {data} = await request.post('common/resetConfig'); // 注意：建议用 POST
         if (data?.code === 200) {
-          message.success('配置已重置，正在跳转...');
+          message.success('Configuration reset successfully, redirecting...');
           // 延迟 1 秒跳转，确保 message 能被看到
           setTimeout(() => {
             router.push('/setup');
           }, 1000);
         } else {
-          message.error('重置失败: ' + (data?.message || '未知错误'));
+          message.error('Reset failed: ' + (data?.message || 'Unknown error'));
         }
       } catch (error: any) {
-        message.error('请求失败: ' + (error.response?.data?.message || error.message));
+        message.error('Request failed: ' + (error.response?.data?.message || error.message));
       }
     },
   });
@@ -131,13 +131,13 @@ async function login() {
   // 如果已经登录，先退出
   if (loginUserStore.isLoggedIn) {
     Modal.confirm({
-      title: '确认退出登录？',
-      content: '确定要退出当前用户吗？',
-      okText: '确定',
-      cancelText: '取消',
+      title: 'Confirm to logout?',
+      content: 'Are you sure to log out now?',
+      okText: 'Yes',
+      cancelText: 'Cancel',
       onOk: () => {
         loginUserStore.logout();
-        message.success('已退出登录');
+        message.success('Log out successfully!');
       }
     });
     return;
@@ -145,17 +145,17 @@ async function login() {
 
   // 未登录，显示登录表单
   Modal.confirm({
-    title: '用户登录',
+    title: 'Login',
     content: () => h('div', {style: {marginTop: '20px'}}, [
       h('div', {style: {marginBottom: '10px', display: 'flex', alignItems: 'center'}}, [
         h('span', {
           style: {
-            width: '70px',
+            width: '80px',
             display: 'inline-block',
             textAlign: 'center',
             marginRight: '10px'
           }
-        }, '用户名：'),
+        }, 'Username :'),
         h('input', {
           type: 'text',
           value: loginForm.username,
@@ -173,12 +173,12 @@ async function login() {
       h('div', {style: {marginBottom: '10px', display: 'flex', alignItems: 'center'}}, [
         h('span', {
           style: {
-            width: '70px',
+            width: '80px',
             display: 'inline-block',
             textAlign: 'center',
             marginRight: '10px'
           }
-        }, '密   码：'),
+        }, 'Password :'),
         h('input', {
           type: 'password',
           value: loginForm.password,
@@ -194,18 +194,18 @@ async function login() {
         })
       ])
     ]),
-    okText: '登录',
-    cancelText: '取消',
+    okText: 'Yes',
+    cancelText: 'Cancel',
     onOk: async () => {
       // 验证用户名和密码
       if (loginForm.username === admin.username && loginForm.password === systemConfigStore.adminPassword) {
         loginUserStore.setLoginUser(loginForm.username);
-        message.success('登录成功！');
+        message.success('Login successfully!');
         // 清空表单
         loginForm.username = '';
         loginForm.password = '';
       } else {
-        message.error('用户名或密码不正确');
+        message.error('username or password is incorrect!');
         // 清空密码框
         loginForm.password = '';
       }
